@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { services, technicians as seedTechnicians } from './data'
-import type { Order, Screen, Service } from './types'
+import type { Address, Order, Screen, Service } from './types'
 import { usePersistedState } from './hooks/usePersistedState'
 import { DesktopShowcase } from './components/DesktopShowcase'
 import { LoginScreen } from './components/LoginScreen'
@@ -15,7 +15,8 @@ import { MessagesScreen } from './components/MessagesScreen'
 import { ProfileScreen } from './components/ProfileScreen'
 import { BottomNav } from './components/BottomNav'
 
-interface BookingDraft { dateLabel: string; time: string; intensity: string }
+interface BookingDraft { dateLabel: string; time: string; intensity: string; address: Address; note: string }
+const defaultAddress: Address = { id: 'home', label: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号' }
 
 export function App() {
   const [authenticated, setAuthenticated] = usePersistedState('luohan_auth_v2', false)
@@ -25,7 +26,7 @@ export function App() {
   const [selectedTechId, setSelectedTechId] = useState(seedTechnicians[0].id)
   const [selectedService, setSelectedService] = useState<Service>(services[0])
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot>({ dateIndex: 0, dateLabel: '今天', time: '19:00' })
-  const [draft, setDraft] = useState<BookingDraft>({ dateLabel: '今天', time: '19:00', intensity: '适中' })
+  const [draft, setDraft] = useState<BookingDraft>({ dateLabel: '今天', time: '19:00', intensity: '适中', address: defaultAddress, note: '' })
   const [toast, setToast] = useState('')
   const technician = technicians.find((item) => item.id === selectedTechId) ?? technicians[0]
   const orderTechnician = order ? technicians.find((item) => item.id === order.techId) : undefined
@@ -48,6 +49,7 @@ export function App() {
     setOrder(nextOrder); navigate('success'); notify('支付成功，预约已提交')
   }
   const updateOrder = useCallback((next: Order) => setOrder(next), [setOrder])
+  const rebook = (techId: number, serviceId: string) => { const service = services.find((item) => item.id === serviceId) ?? services[0]; setSelectedTechId(techId); setSelectedService(service); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('booking'); notify('已载入历史预约配置') }
   const showNav = ['home','orders','messages','profile'].includes(screen)
 
   const content = useMemo(() => {
@@ -55,9 +57,9 @@ export function App() {
     if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} initialDateIndex={selectedSlot.dateIndex} initialTime={selectedSlot.time} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
     if (screen === 'payment') return <PaymentScreen technician={technician} service={selectedService} schedule={`${draft.dateLabel} ${draft.time}`} onBack={() => navigate('booking')} onPaid={pay}/>
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
-    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onNotify={notify}/>
+    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={() => { setOrder(null); notify('订单已取消，退款将原路退回') }} onNotify={notify}/>
     if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
-    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
+    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onRebook={rebook} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
     return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate}/>
   }, [screen, technician, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, updateOrder])
 

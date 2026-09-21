@@ -20,6 +20,12 @@ export interface Service {
   price: number
 }
 
+export interface Address {
+  id: string
+  label: string
+  detail: string
+}
+
 export interface Order {
   id: string
   techId: number
@@ -30,4 +36,8 @@ export interface Order {
   paymentMethod: string
   status: number
   etaSeconds: number
+  address: Address
+  note: string
+  reviewed?: boolean
+  reviewRating?: number
 }

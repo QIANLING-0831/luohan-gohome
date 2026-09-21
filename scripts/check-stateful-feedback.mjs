@@ -3,6 +3,8 @@ import { join } from 'node:path'
 
 const detail = readFileSync(join(process.cwd(), 'src', 'components', 'TechnicianDetail.tsx'), 'utf8')
 const profile = readFileSync(join(process.cwd(), 'src', 'components', 'ProfileScreen.tsx'), 'utf8')
+const booking = readFileSync(join(process.cwd(), 'src', 'components', 'BookingScreen.tsx'), 'utf8')
+const orders = readFileSync(join(process.cwd(), 'src', 'components', 'OrdersScreen.tsx'), 'utf8')
 const failures = []
 
 if (!/<button[^>]+slot-pill/.test(detail) || !/selectedSlot/.test(detail) || !/onSlotSelect/.test(detail)) {
@@ -11,6 +13,18 @@ if (!/<button[^>]+slot-pill/.test(detail) || !/selectedSlot/.test(detail) || !/o
 
 if (!/selectedPreferences/.test(profile) || !/togglePreference/.test(profile) || !/selectedPreferences\.includes/.test(profile)) {
   failures.push('按摩偏好必须在点击后切换可见选中态')
+}
+
+if (!/onRebook/.test(profile) || !/history-item/.test(profile)) {
+  failures.push('历史订单必须能够进入再次预约流程')
+}
+
+if (!/addressOpen/.test(booking) || !/occupied/.test(booking) || !/address-option/.test(booking)) {
+  failures.push('预约表单必须支持档期占用与地址选择')
+}
+
+if (!/Panel = 'chat' \| 'cancel' \| 'review'/.test(orders) || !/sendMessage/.test(orders) || !/submitReview/.test(orders)) {
+  failures.push('订单页必须包含聊天、取消和评价闭环')
 }
 
 if (failures.length) {
