@@ -53,11 +53,11 @@ export function App() {
     if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
     if (screen === 'payment') return <PaymentScreen technician={technician} service={selectedService} schedule={`${draft.dateLabel} ${draft.time}`} onBack={() => navigate('booking')} onPaid={pay}/>
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
-    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder}/>
-    if (screen === 'messages') return <MessagesScreen/>
-    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
+    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onNotify={notify}/>
+    if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
+    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
     return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate}/>
   }, [screen, technician, selectedService, draft, order, orderTechnician, orderService, technicians, updateOrder])
 
-  return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onLogin={() => { setAuthenticated(true); notify('登录成功，欢迎回来') }}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>
+  return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={() => { setAuthenticated(true); notify('登录成功，欢迎回来') }}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>
 }
