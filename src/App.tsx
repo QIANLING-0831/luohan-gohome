@@ -6,6 +6,7 @@ import { DesktopShowcase } from './components/DesktopShowcase'
 import { LoginScreen } from './components/LoginScreen'
 import { HomeScreen } from './components/HomeScreen'
 import { TechnicianDetail } from './components/TechnicianDetail'
+import type { AppointmentSlot } from './components/TechnicianDetail'
 import { BookingScreen } from './components/BookingScreen'
 import { PaymentScreen } from './components/PaymentScreen'
 import { SuccessScreen } from './components/SuccessScreen'
@@ -23,6 +24,7 @@ export function App() {
   const [technicians, setTechnicians] = useState(seedTechnicians)
   const [selectedTechId, setSelectedTechId] = useState(seedTechnicians[0].id)
   const [selectedService, setSelectedService] = useState<Service>(services[0])
+  const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot>({ dateIndex: 0, dateLabel: '今天', time: '19:00' })
   const [draft, setDraft] = useState<BookingDraft>({ dateLabel: '今天', time: '19:00', intensity: '适中' })
   const [toast, setToast] = useState('')
   const technician = technicians.find((item) => item.id === selectedTechId) ?? technicians[0]
@@ -40,7 +42,7 @@ export function App() {
     if ('startViewTransition' in document) (document as Document & { startViewTransition: (callback: () => void) => void }).startViewTransition(update)
     else update()
   }
-  const openTechnician = (id: number) => { setSelectedTechId(id); setSelectedService(services[0]); navigate('detail') }
+  const openTechnician = (id: number) => { setSelectedTechId(id); setSelectedService(services[0]); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('detail') }
   const pay = (paymentMethod: string) => {
     const nextOrder: Order = { id: `LH${Date.now().toString().slice(-8)}`, techId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, status: 0, etaSeconds: 720 }
     setOrder(nextOrder); navigate('success'); notify('支付成功，预约已提交')
@@ -49,15 +51,15 @@ export function App() {
   const showNav = ['home','orders','messages','profile'].includes(screen)
 
   const content = useMemo(() => {
-    if (screen === 'detail') return <TechnicianDetail technician={technician} services={services} selected={selectedService} onSelect={setSelectedService} onBack={() => navigate('home')} onBook={() => navigate('booking')}/>
-    if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
+    if (screen === 'detail') return <TechnicianDetail technician={technician} services={services} selected={selectedService} selectedSlot={selectedSlot} onSelect={setSelectedService} onSlotSelect={(slot) => { setSelectedSlot(slot); notify(`已选择 ${slot.dateLabel} ${slot.time}`) }} onBack={() => navigate('home')} onBook={() => navigate('booking')}/>
+    if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} initialDateIndex={selectedSlot.dateIndex} initialTime={selectedSlot.time} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
     if (screen === 'payment') return <PaymentScreen technician={technician} service={selectedService} schedule={`${draft.dateLabel} ${draft.time}`} onBack={() => navigate('booking')} onPaid={pay}/>
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
     if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onNotify={notify}/>
     if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
     if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
     return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate}/>
-  }, [screen, technician, selectedService, draft, order, orderTechnician, orderService, technicians, updateOrder])
+  }, [screen, technician, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, updateOrder])
 
   return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={() => { setAuthenticated(true); notify('登录成功，欢迎回来') }}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>
 }

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "npm run check:buttons && tsc -b && vite build",
+    "build": "npm run check:buttons && npm run check:stateful && tsc -b && vite build",
     "check:buttons": "node scripts/check-button-feedback.mjs",
+    "check:stateful": "node scripts/check-stateful-feedback.mjs",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview --host 0.0.0.0"
   },
