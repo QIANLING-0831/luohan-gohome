@@ -1,0 +1,3 @@
+export function MessagesScreen() {
+  return <section className="screen active"><header><div className="brand">消息中心</div><button className="icon-btn">✓</button></header><div className="hero-strip"><span><small>智能服务助手</small><b>你有 3 条新动态</b></span><strong>3</strong></div><div className="message-list">{[['⌖','订单助手','技师已收到你的预约需求，预计 2 分钟内确认'],['券','限时福利','今晚下单，精油推背立减 30 元'],['盾','安全播报','平台本月已完成 8,320 次资质复核']].map(([icon,title,copy]) => <button className="message-card" key={title}><span className="message-icon">{icon}</span><span><b>{title}</b><p>{copy}</p></span><i className="unread"/></button>)}</div></section>
+}
