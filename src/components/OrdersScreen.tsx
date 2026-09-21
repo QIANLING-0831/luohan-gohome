@@ -114,7 +114,8 @@ export function OrdersScreen({
   };
 
   return (
-    <section className="screen active">
+    <>
+      <section className="screen active">
       <header>
         <div className="brand">我的订单</div>
         <button
@@ -245,6 +246,7 @@ export function OrdersScreen({
           </div>
         </div>
       </div>
+      </section>
       <div
         className={`sheet-mask ${panel ? "open" : ""}`}
         onClick={() => setPanel(null)}
@@ -348,6 +350,6 @@ export function OrdersScreen({
           )}
         </div>
       </div>
-    </section>
+    </>
   );
 }

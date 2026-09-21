@@ -256,6 +256,7 @@
 }
 .tech-card-shell .tech-card {
   width: 100%;
+  padding-right: 56px;
 }
 .favorite-btn {
   position: absolute;
