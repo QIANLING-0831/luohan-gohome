@@ -1,11 +1,14 @@
 import type { Service, Technician } from './types'
+import technicianChen from './assets/technician-chen.jpg'
+import technicianZhou from './assets/technician-zhou.jpg'
+import technicianLin from './assets/technician-lin.jpg'
 
 export const center = { lat: 31.2304, lng: 121.4737 }
 
 export const technicians: Technician[] = [
-  { id: 1, name: '陈静', title: '金牌理疗师', rating: 4.98, orders: 862, lat: 31.2339, lng: 121.4672, price: 239, img: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=300&q=85', intro: '8年经络理疗经验，擅长肩颈放松与久坐疲劳改善。手法沉稳，力度可按需调节。' },
-  { id: 2, name: '周岚', title: '资深推拿师', rating: 4.96, orders: 619, lat: 31.2301, lng: 121.4603, price: 269, img: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=300&q=85', intro: '专注中式推拿与精油舒缓，服务细致，善于针对性缓解腰背紧张。' },
-  { id: 3, name: '林悦', title: '芳疗师', rating: 4.93, orders: 476, lat: 31.2266, lng: 121.4728, price: 299, img: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=85', intro: '国家认证芳疗师，结合呼吸节奏与精油按摩，打造舒缓放松体验。' },
+  { id: 1, name: '陈静', title: '金牌理疗师', rating: 4.98, orders: 862, lat: 31.2339, lng: 121.4672, price: 239, img: technicianChen, intro: '8年经络理疗经验，擅长肩颈放松与久坐疲劳改善。手法沉稳，力度可按需调节。' },
+  { id: 2, name: '周岚', title: '资深推拿师', rating: 4.96, orders: 619, lat: 31.2301, lng: 121.4603, price: 269, img: technicianZhou, intro: '专注中式推拿与精油舒缓，服务细致，善于针对性缓解腰背紧张。' },
+  { id: 3, name: '林悦', title: '芳疗师', rating: 4.93, orders: 476, lat: 31.2266, lng: 121.4728, price: 299, img: technicianLin, intro: '国家认证芳疗师，结合呼吸节奏与精油按摩，打造舒缓放松体验。' },
 ]
 
 export const services: Service[] = [

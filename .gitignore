@@ -3,3 +3,13 @@ node_modules/
 .sites-stage-*/
 .sites-package*.tar.gz
 *.tsbuildinfo
+.env
+.env.*
+!.env.example
+
+.vercel
+.netlify
+
+# Local QA and deployment screenshots
+deliverables/qa-*/
+surge-mobile-check.png

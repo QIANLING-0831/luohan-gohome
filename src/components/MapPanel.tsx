@@ -1,25 +1,36 @@
-import { useEffect, useRef } from 'react'
-import L from 'leaflet'
+import { useEffect, useRef, useState } from 'react'
 import type { Technician } from '../types'
 import { center, distanceKm } from '../data'
+import { loadAMap } from '../lib/amap'
+import { LocalNearbyMap } from './LocalMap'
 
 interface Props { technicians: Technician[]; onSelect: (id: number) => void }
 
 export function MapPanel({ technicians, onSelect }: Props) {
   const nodeRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const markersRef = useRef(new Map<number, L.Marker>())
+  const mapRef = useRef<any>(null)
+  const markersRef = useRef(new Map<number, any>())
   const selectRef = useRef(onSelect)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading')
   selectRef.current = onSelect
 
   useEffect(() => {
     if (!nodeRef.current || mapRef.current) return
-    const map = L.map(nodeRef.current, { zoomControl: false, attributionControl: true }).setView([center.lat, center.lng], 14)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(map)
-    L.control.zoom({ position: 'bottomright' }).addTo(map)
-    L.marker([center.lat, center.lng], { icon: L.divIcon({ className: 'marker-shell', html: '<div class="user-marker"></div>', iconSize: [22, 22] }) }).addTo(map).bindTooltip('我的位置')
-    mapRef.current = map
-    return () => { map.remove(); mapRef.current = null; markersRef.current.clear() }
+    let cancelled = false
+    loadAMap().then((AMap) => {
+      if (cancelled || !nodeRef.current) return
+      const map = new AMap.Map(nodeRef.current, { center: [center.lng, center.lat], zoom: 14.2, viewMode: '2D', resizeEnable: true })
+      map.addControl(new AMap.Scale({ position: 'RB' }))
+      map.add(new AMap.Marker({ position: [center.lng, center.lat], content: '<div class="user-marker"></div>', title: '我的位置', offset: new AMap.Pixel(-11, -11) }))
+      mapRef.current = map
+      setStatus('ready')
+    }).catch(() => { if (!cancelled) setStatus('fallback') })
+    return () => {
+      cancelled = true
+      mapRef.current?.destroy()
+      mapRef.current = null
+      markersRef.current.clear()
+    }
   }, [])
 
   useEffect(() => {
@@ -28,13 +39,20 @@ export function MapPanel({ technicians, onSelect }: Props) {
     technicians.forEach((tech) => {
       let marker = markersRef.current.get(tech.id)
       if (!marker) {
-        marker = L.marker([tech.lat, tech.lng], { icon: L.divIcon({ className: 'marker-shell', html: `<img class="tech-marker" src="${tech.img}" alt="">`, iconSize: [42, 42] }) }).addTo(map)
+        const AMap = (window as any).AMap
+        marker = new AMap.Marker({ position: [tech.lng, tech.lat], content: `<div class="amap-tech-shell"><img class="tech-marker" src="${tech.img}" alt=""><span>${tech.name}</span></div>`, offset: new AMap.Pixel(-21, -21), title: tech.name })
         marker.on('click', () => selectRef.current(tech.id))
+        map.add(marker)
         markersRef.current.set(tech.id, marker)
       }
-      marker.setLatLng([tech.lat, tech.lng]).setTooltipContent(`${tech.name} · ${distanceKm(tech).toFixed(1)}km`)
+      marker.setPosition([tech.lng, tech.lat])
+      marker.setTitle(`${tech.name} · ${distanceKm(tech).toFixed(1)}km`)
     })
-  }, [technicians])
+  }, [technicians, status])
 
-  return <div ref={nodeRef} className="map" aria-label="附近技师地图" />
+  return <div className={`china-map-shell ${status}`}>
+    <LocalNearbyMap technicians={technicians} onSelect={onSelect}/>
+    <div ref={nodeRef} className="map amap-layer" aria-label="高德地图：附近技师位置" />
+    {status !== 'ready' && <span className="map-source-badge">{status === 'loading' ? '正在加载高德地图…' : '本地地图模式 · 实时位置正常'}</span>}
+  </div>
 }
