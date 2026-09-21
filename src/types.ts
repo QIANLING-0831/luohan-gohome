@@ -38,6 +38,10 @@ export interface Order {
   etaSeconds: number
   address: Address
   note: string
+  originalPrice?: number
+  discount?: number
+  paidAmount?: number
+  couponLabel?: string
   reviewed?: boolean
   reviewRating?: number
 }

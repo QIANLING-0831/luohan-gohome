@@ -16,6 +16,7 @@ import { ProfileScreen } from './components/ProfileScreen'
 import { BottomNav } from './components/BottomNav'
 
 interface BookingDraft { dateLabel: string; time: string; intensity: string; address: Address; note: string }
+interface Settlement { discount: number; paidAmount: number; couponLabel: string }
 const defaultAddress: Address = { id: 'home', label: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号' }
 
 export function App() {
@@ -44,8 +45,8 @@ export function App() {
     else update()
   }
   const openTechnician = (id: number) => { setSelectedTechId(id); setSelectedService(services[0]); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('detail') }
-  const pay = (paymentMethod: string) => {
-    const nextOrder: Order = { id: `LH${Date.now().toString().slice(-8)}`, techId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, status: 0, etaSeconds: 720 }
+  const pay = (paymentMethod: string, settlement: Settlement) => {
+    const nextOrder: Order = { id: `LH${Date.now().toString().slice(-8)}`, techId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, status: 0, etaSeconds: 720, originalPrice: selectedService.price, ...settlement }
     setOrder(nextOrder); navigate('success'); notify('支付成功，预约已提交')
   }
   const updateOrder = useCallback((next: Order) => setOrder(next), [setOrder])
@@ -60,7 +61,7 @@ export function App() {
     if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={() => { setOrder(null); notify('订单已取消，退款将原路退回') }} onNotify={notify}/>
     if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
     if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onRebook={rebook} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
-    return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate}/>
+    return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate} onNotify={notify}/>
   }, [screen, technician, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, updateOrder])
 
   return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={() => { setAuthenticated(true); notify('登录成功，欢迎回来') }}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>

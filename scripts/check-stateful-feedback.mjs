@@ -5,6 +5,8 @@ const detail = readFileSync(join(process.cwd(), 'src', 'components', 'Technician
 const profile = readFileSync(join(process.cwd(), 'src', 'components', 'ProfileScreen.tsx'), 'utf8')
 const booking = readFileSync(join(process.cwd(), 'src', 'components', 'BookingScreen.tsx'), 'utf8')
 const orders = readFileSync(join(process.cwd(), 'src', 'components', 'OrdersScreen.tsx'), 'utf8')
+const home = readFileSync(join(process.cwd(), 'src', 'components', 'HomeScreen.tsx'), 'utf8')
+const payment = readFileSync(join(process.cwd(), 'src', 'components', 'PaymentScreen.tsx'), 'utf8')
 const failures = []
 
 if (!/<button[^>]+slot-pill/.test(detail) || !/selectedSlot/.test(detail) || !/onSlotSelect/.test(detail)) {
@@ -23,8 +25,16 @@ if (!/addressOpen/.test(booking) || !/occupied/.test(booking) || !/address-optio
   failures.push('预约表单必须支持档期占用与地址选择')
 }
 
-if (!/Panel = 'chat' \| 'cancel' \| 'review'/.test(orders) || !/sendMessage/.test(orders) || !/submitReview/.test(orders)) {
+if (!/Panel = ["']chat["'] \| ["']cancel["'] \| ["']review["']/.test(orders) || !/sendMessage/.test(orders) || !/submitReview/.test(orders)) {
   failures.push('订单页必须包含聊天、取消和评价闭环')
+}
+
+if (!/luohan_favorites_v1/.test(home) || !/tech-search/.test(home) || !/favorite-btn/.test(home) || !/search-empty/.test(home)) {
+  failures.push('首页必须支持搜索、收藏筛选和空状态反馈')
+}
+
+if (!/couponOpen/.test(payment) || !/paidAmount/.test(payment) || !/price-breakdown/.test(payment) || !/coupon-options/.test(payment)) {
+  failures.push('支付页必须支持优惠券选择和实付金额联动')
 }
 
 if (failures.length) {
