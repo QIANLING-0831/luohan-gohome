@@ -29,6 +29,7 @@ import { ChangePasswordDialog } from './components/ChangePasswordDialog'
 interface BookingDraft { dateLabel: string; dateKey: string; time: string; intensity: string; address: Address; note: string }
 interface Settlement { discount: number; paidAmount: number; couponLabel: string }
 const defaultAddress: Address = { id: 'home', label: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号' }
+const offlineDemoEnabled = import.meta.env.DEV
 
 export function App() {
   const [authenticated, setAuthenticated] = useSessionState('luohan_auth_v2', false)
@@ -130,20 +131,16 @@ export function App() {
           notify(error instanceof Error ? error.message : '下单失败，请稍后重试')
           throw error
         }
+        if (!offlineDemoEnabled) { notify('服务暂时不可用，订单未提交，请稍后重试'); throw new Error('服务暂时不可用，订单未提交') }
         notify('后端暂时离线，本次订单保存在当前设备')
       }
     }
     setOrder(nextOrder); setUserOrders((current) => [nextOrder, ...current]); navigate('success'); notify('支付成功，预约已提交')
   }
   const updateOrder = useCallback((next: Order) => {
-    const shouldPersistStatus = Boolean(order && next.id === order.id && next.status !== order.status && hasApiSession())
     setOrder(next)
     setUserOrders((current) => current.map((item) => item.id === next.id ? next : item))
-    if (shouldPersistStatus) orderClient.advance(next.id).then(setOrder).catch((error) => {
-      setOrder(order)
-      notify(error instanceof Error ? error.message : '状态更新失败')
-    })
-  }, [order, setOrder])
+  }, [])
   const cancelOrder = useCallback(() => {
     const current = order
     if (!current) return
@@ -171,6 +168,7 @@ export function App() {
       setAuthenticated(true); notify('登录成功，数据已与后端同步')
     } catch (error) {
       if (!(error instanceof ApiUnavailableError)) throw error
+      if (!offlineDemoEnabled) throw new Error('服务暂时不可用，请稍后重试')
       const demoCredentials: Record<string, { code?: string; password: string }> = {
         '13800138000': { code: '888888', password: 'Demo@2026' },
         '13900139000': { code: '888888', password: 'Demo@2026' },

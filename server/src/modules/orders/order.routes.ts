@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate } from '../../middleware/authentication.js'
-import { advanceOrder, cancelOrder, createOrder, listOrders, reviewOrder } from './order.service.js'
+import { cancelOrder, createOrder, listOrders, reviewOrder } from './order.service.js'
 
 export const orderRouter = Router()
 orderRouter.use(authenticate)
@@ -20,10 +20,6 @@ orderRouter.post('/', async (req, res, next) => {
     }).parse(req.body)
     res.status(201).json({ data: await createOrder(req.auth!.sub, input) })
   } catch (error) { next(error) }
-})
-
-orderRouter.post('/:id/advance', async (req, res, next) => {
-  try { res.json({ data: await advanceOrder(req.auth!.sub, req.params.id) }) } catch (error) { next(error) }
 })
 
 orderRouter.post('/:id/cancel', async (req, res, next) => {

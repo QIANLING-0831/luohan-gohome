@@ -19,7 +19,7 @@ export function saveApiSession(token: string) { localStorage.removeItem(TOKEN_KE
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController()
-  const timer = window.setTimeout(() => controller.abort(), 5000)
+  const timer = window.setTimeout(() => controller.abort(), 10000)
   try {
     const token = sessionStorage.getItem(TOKEN_KEY)
     const response = await fetch(`${API_BASE}${path}`, {

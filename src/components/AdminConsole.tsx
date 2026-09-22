@@ -229,6 +229,8 @@ const demoDashboard: AdminDashboardData = {
   recentOrders: demoOrders,
 };
 
+const offlineDemoEnabled = import.meta.env.DEV;
+
 export function AdminConsole({
   user,
   onLogout,
@@ -253,7 +255,7 @@ export function AdminConsole({
   const [orderTechnician, setOrderTechnician] = useState("ALL");
   const [selectedOrder, setSelectedOrder] = useState<ManagedOrder | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoData, setIsDemoData] = useState(true);
+  const [isDemoData, setIsDemoData] = useState(false);
   const [techSearch, setTechSearch] = useState("");
   const [techFilter, setTechFilter] = useState<
     "ALL" | "ONLINE" | "OFFLINE" | "ARCHIVED"
@@ -327,7 +329,7 @@ export function AdminConsole({
       setManagedServices(nextServices);
       setIsDemoData(false);
     } catch (error) {
-      if (error instanceof ApiUnavailableError) {
+      if (error instanceof ApiUnavailableError && offlineDemoEnabled) {
         setDashboard(demoDashboard);
         setOrders(demoOrders);
         setTechnicians(demoTechnicians);
@@ -437,7 +439,7 @@ export function AdminConsole({
       onNotify(`${technician.name}已${next ? "上线" : "下线"}`);
       await load();
     } catch (error) {
-      if (error instanceof ApiUnavailableError)
+      if (error instanceof ApiUnavailableError && offlineDemoEnabled)
         onNotify(`演示模式：${technician.name}已${next ? "上线" : "下线"}`);
       else {
         setTechnicians((current) =>
@@ -565,7 +567,7 @@ export function AdminConsole({
       setEditing(null);
       onNotify(`${updated.name}的档案已保存`);
     } catch (error) {
-      if (error instanceof ApiUnavailableError) {
+      if (error instanceof ApiUnavailableError && offlineDemoEnabled) {
         setTechnicians((current) =>
           current.map((item) => (item.id === fallback.id ? fallback : item)),
         );

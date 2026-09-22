@@ -19,7 +19,7 @@ technicianRouter.get('/', async (_req, res, next) => {
 })
 
 technicianRouter.get('/:id/availability', async (req, res, next) => {
-  try { const technicianId = Number(req.params.id); const [technician, orders] = await Promise.all([database.technician.findFirstOrThrow({ where: { id: technicianId, active: true, archivedAt: null } }), database.order.findMany({ where: { technicianId, status: { not: 'CANCELLED' } }, select: { appointmentAt: true } })]); res.json({ data: { occupied: orders.map((item) => beijingSlot(item.appointmentAt)), workStart: technician.workStart, workEnd: technician.workEnd, workDays: JSON.parse(technician.workDays) as number[] } }) }
+  try { const technicianId = Number(req.params.id); const [technician, orders] = await Promise.all([database.technician.findFirstOrThrow({ where: { id: technicianId, active: true, archivedAt: null } }), database.order.findMany({ where: { technicianId, status: { not: 'CANCELLED' } }, select: { appointmentAt: true, service: { select: { duration: true } } } })]); res.json({ data: { occupied: orders.map((item) => beijingSlot(item.appointmentAt)), bookings: orders.map((item) => ({ slot: beijingSlot(item.appointmentAt), duration: item.service.duration })), workStart: technician.workStart, workEnd: technician.workEnd, workDays: JSON.parse(technician.workDays) as number[] } }) }
   catch (error) { next(error) }
 })
 

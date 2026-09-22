@@ -37,10 +37,12 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   const weekday = new Date(`${input.dateKey}T12:00:00+08:00`).getUTCDay()
   if (!workDays.includes(weekday)) throw new AppError(409, '该技师当天休息，请选择其他日期')
   if (input.time < technician.workStart || input.time > technician.workEnd) throw new AppError(409, '所选时间不在该技师接单时段内')
-  const conflict = await database.order.findFirst({
-    where: { technicianId: technician.id, appointmentAt: scheduledAt, status: { not: 'CANCELLED' } },
-  })
-  if (conflict) throw new AppError(409, '该时段刚刚被预约，请选择其他时间', 'SLOT_UNAVAILABLE')
+  const end = new Date(scheduledAt.getTime() + service.duration * 60000)
+  const workEnd = appointmentDate(input.dateKey, technician.workEnd)
+  if (end > workEnd) throw new AppError(409, '该服务将在技师下班后结束，请选择更早时间')
+  const existingOrders = await database.order.findMany({ where: { technicianId: technician.id, status: { not: 'CANCELLED' } }, include: { service: true } })
+  const conflict = existingOrders.some((existing) => { const existingEnd = new Date(existing.appointmentAt.getTime() + existing.service.duration * 60000); return existing.appointmentAt < end && existingEnd > scheduledAt })
+  if (conflict) throw new AppError(409, '该时段与已有预约重叠，请选择其他时间', 'SLOT_UNAVAILABLE')
   const allowedCoupons: Record<string, number> = { '新客立减券': service.price >= 199 ? 30 : 0, '金卡会员券': 20, '不使用优惠券': 0 }
   const couponLabel = input.couponLabel && Object.hasOwn(allowedCoupons, input.couponLabel) ? input.couponLabel : '不使用优惠券'
   const discount = Math.min(service.price, allowedCoupons[couponLabel])
@@ -56,7 +58,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
 }
 
 export async function listOrders(userId: string) {
-  return (await database.order.findMany({ where: { userId, status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' } })).map(presentOrder)
+  return (await database.order.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map(presentOrder)
 }
 
 export async function advanceOrder(userId: string, orderId: string) {

@@ -30,14 +30,15 @@ export async function getDashboard() {
     database.user.count({ where: { role: 'USER' } }),
   ])
   const revenue = orders.filter((item) => item.status === 'COMPLETED').reduce((sum, item) => sum + item.paidAmount, 0)
-  const statusCounts = ['PENDING', 'ACCEPTED', 'DEPARTED', 'ARRIVED', 'IN_SERVICE', 'COMPLETED'].map((status) => ({
+  const statusCounts = ['PENDING', 'ACCEPTED', 'DEPARTED', 'ARRIVED', 'IN_SERVICE', 'COMPLETED', 'CANCELLED'].map((status) => ({
     status, count: orders.filter((item) => item.status === status).length,
   }))
   const trend = Array.from({ length: 7 }, (_, reverseIndex) => {
     const offset = 6 - reverseIndex
-    const date = new Date(); date.setDate(date.getDate() - offset)
-    const key = date.toISOString().slice(0, 10)
-    return { label: `${date.getMonth() + 1}/${date.getDate()}`, count: orders.filter((item) => item.createdAt.toISOString().slice(0, 10) === key).length }
+    const date = new Date(Date.now() - offset * 86400000)
+    const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+    const [, month, day] = key.split('-')
+    return { label: `${Number(month)}/${Number(day)}`, count: orders.filter((item) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(item.createdAt) === key).length }
   })
   return {
     metrics: { totalOrders: orders.length, pendingOrders: orders.filter((item) => item.status === 'PENDING').length, revenue, activeTechnicians, userCount },

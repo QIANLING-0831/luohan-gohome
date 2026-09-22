@@ -6,6 +6,7 @@ import { ApiUnavailableError } from '../api/client'
 
 const statusName = ['待接单','已接单','已出发','已到达','服务中','已完成']
 const demoOverview: TechnicianOverview = { technician: { id: 1, name: '陈静', title: '金牌理疗师', active: true, rating: 4.98 }, metrics: { todayOrders: 2, pendingOrders: 1, completedOrders: 862, income: 12680 }, orders: [{ id: 'LHDEMO1001', status: 'PENDING', statusIndex: 0, customer: '罗女士', phone: '138****8000', service: '肩颈深度放松', amount: 209, schedule: '明天 19:00', address: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号', intensity: '适中', note: '肩颈重点放松' }] }
+const offlineDemoEnabled = import.meta.env.DEV
 
 export function TechnicianWorkbench({ user, onLogout, onChangePassword, onNotify }: { user: SessionUser; onLogout: () => void; onChangePassword: () => void; onNotify: (message: string) => void }) {
   const [data, setData] = useState<TechnicianOverview | null>(null)
@@ -15,7 +16,7 @@ export function TechnicianWorkbench({ user, onLogout, onChangePassword, onNotify
   const load = useCallback(async () => {
     try { setData(await technicianWorkbenchClient.overview()) }
     catch (error) {
-      if (error instanceof ApiUnavailableError) { setData(demoOverview); onNotify('当前为离线技师工作台演示数据') }
+      if (error instanceof ApiUnavailableError && offlineDemoEnabled) { setData(demoOverview); onNotify('当前为离线技师工作台演示数据') }
       else onNotify(error instanceof Error ? error.message : '工作台加载失败')
     }
   }, [onNotify])
@@ -24,7 +25,7 @@ export function TechnicianWorkbench({ user, onLogout, onChangePassword, onNotify
     setBusyId(id)
     try { const updated = await technicianWorkbenchClient.advance(id); const message = `订单已更新为「${statusName[updated.statusIndex]}」`; setFeedback(message); onNotify(message); await load() }
     catch (error) {
-      if (error instanceof ApiUnavailableError) {
+      if (error instanceof ApiUnavailableError && offlineDemoEnabled) {
         setData((current) => current ? { ...current, orders: current.orders.map((item) => item.id === id ? { ...item, statusIndex: Math.min(5, item.statusIndex + 1), status: ['PENDING','ACCEPTED','DEPARTED','ARRIVED','IN_SERVICE','COMPLETED'][Math.min(5, item.statusIndex + 1)] } : item) } : current)
         setFeedback('演示模式：订单状态已在当前页面推进'); onNotify('演示模式：订单状态已在当前页面推进')
       } else onNotify(error instanceof Error ? error.message : '状态更新失败')

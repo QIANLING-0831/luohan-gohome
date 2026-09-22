@@ -91,15 +91,9 @@ export function OrdersScreen({
         : order.status === 4
           ? "进行中"
           : "已结束";
-  const advance = () => {
-    if (order.status === 6) return onNotify('该订单已取消，无法继续推进');
-    if (order.status === 5) {
-      if (order.reviewed)
-        return onNotify(`本次服务已评价 ${order.reviewRating} 星`);
-      return setPanel("review");
-    }
-    onUpdate({ ...order, status: order.status + 1 });
-    onNotify(`订单已更新为「${orderStatuses[order.status + 1]}」`);
+  const openReview = () => {
+    if (order.reviewed) return onNotify(`本次服务已评价 ${order.reviewRating} 星`);
+    setPanel("review");
   };
   const sendMessage = (text = message) => {
     const clean = text.trim();
@@ -260,14 +254,14 @@ export function OrdersScreen({
             <button className="secondary" onClick={() => setPanel("chat")}>
               在线联系
             </button>
-            <button className="primary" onClick={advance}>
+            <button className="primary" disabled={order.status !== 5 || Boolean(order.reviewed)} onClick={openReview}>
               {order.status === 6
                 ? "订单已取消"
                 : order.status === 5
                 ? order.reviewed
                   ? `已评价 ${order.reviewRating}★`
                   : "评价本次服务"
-                : `推进到「${orderStatuses[order.status + 1]}」`}
+                : "等待技师更新"}
             </button>
           </div>
         </div>

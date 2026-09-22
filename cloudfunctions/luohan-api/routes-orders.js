@@ -21,8 +21,13 @@ async function handle(event, path, method) {
     c.assert(input.time >= technician.workStart && input.time <= technician.workEnd, 409, '所选时间不在该技师接单时段内')
     const date = new Date(`${input.dateKey}T${input.time}:00+08:00`)
     c.assert(date.getTime() > Date.now(), 400, '预约时间不能早于当前北京时间')
-    const sameTech = c.result(await c.db.from('Order').select('id,status,appointmentAt').eq('technicianId', technician.id))
-    c.assert(!sameTech.some(o => o.status !== 'CANCELLED' && new Date(o.appointmentAt).getTime() === date.getTime()), 409, '该时段刚刚被预约，请选择其他时间')
+    const end = new Date(date.getTime() + service.duration * 60000)
+    const workEnd = new Date(`${input.dateKey}T${technician.workEnd}:00+08:00`)
+    c.assert(end.getTime() <= workEnd.getTime(), 409, '该服务将在技师下班后结束，请选择更早时间')
+    const [sameTechResult, allServicesResult] = await Promise.all([c.db.from('Order').select('id,status,appointmentAt,serviceId').eq('technicianId', technician.id), c.db.from('Service').select('id,duration')])
+    const durations = new Map(c.result(allServicesResult).map(item => [item.id, item.duration]))
+    const sameTech = c.result(sameTechResult)
+    c.assert(!sameTech.some(o => { if (o.status === 'CANCELLED') return false; const existingStart = new Date(o.appointmentAt); const existingEnd = new Date(existingStart.getTime() + Number(durations.get(o.serviceId) || 0) * 60000); return existingStart < end && existingEnd > date }), 409, '该时段与已有预约重叠，请选择其他时间')
     const allowedCoupons = { '新客立减券': service.price >= 199 ? 30 : 0, '金卡会员券': 20, '不使用优惠券': 0 }
     const couponLabel = Object.hasOwn(allowedCoupons, input.couponLabel) ? input.couponLabel : '不使用优惠券'
     const discount = Math.min(service.price, allowedCoupons[couponLabel])
@@ -45,10 +50,9 @@ async function handle(event, path, method) {
     c.result(await c.db.from('Technician').update({ rating: average }).eq('id', order.technicianId))
     return c.presentOrder(updated)
   }
-  const match = path.match(/^\/api\/orders\/([^/]+)\/(advance|cancel)$/)
+  const match = path.match(/^\/api\/orders\/([^/]+)\/(cancel)$/)
   if (match && method === 'POST') {
     const order = await c.first('Order', 'id', match[1]); c.assert(order && order.userId === identity.sub, 404, '订单不存在')
-    if (match[2] === 'advance') return c.presentOrder(await c.advanceOrder(order))
     c.assert(['PENDING', 'ACCEPTED'].includes(order.status), 409, '当前状态不能取消订单')
     c.result(await c.db.from('Order').update({ status: 'CANCELLED', updatedAt: new Date().toISOString() }).eq('id', order.id))
     c.result(await c.db.from('OrderStatusLog').insert({ orderId: order.id, status: 'CANCELLED' }))
