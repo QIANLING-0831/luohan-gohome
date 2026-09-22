@@ -1,0 +1,23 @@
+import type { Address, Order } from '../types'
+import { request } from './client'
+
+export interface CreateOrderInput {
+  technicianId: number
+  serviceId: string
+  dateLabel: string
+  dateKey: string
+  time: string
+  intensity: string
+  paymentMethod: string
+  address: Address
+  note?: string
+  discount?: number
+  couponLabel?: string
+}
+
+export const orderClient = {
+  list: () => request<Order[]>('/api/orders'),
+  create: (input: CreateOrderInput) => request<Order>('/api/orders', { method: 'POST', body: JSON.stringify(input) }),
+  advance: (id: string) => request<Order>(`/api/orders/${id}/advance`, { method: 'POST' }),
+  cancel: (id: string) => request<void>(`/api/orders/${id}/cancel`, { method: 'POST' }),
+}

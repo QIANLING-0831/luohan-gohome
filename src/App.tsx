@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { services, technicians as seedTechnicians } from './data'
 import type { Address, Order, Screen, Service } from './types'
 import { usePersistedState } from './hooks/usePersistedState'
@@ -14,55 +14,145 @@ import { OrdersScreen } from './components/OrdersScreen'
 import { MessagesScreen } from './components/MessagesScreen'
 import { ProfileScreen } from './components/ProfileScreen'
 import { BottomNav } from './components/BottomNav'
+import { authClient } from './api/auth'
+import type { LoginMethod, SessionUser } from './api/auth'
+import { ApiUnavailableError, hasApiSession } from './api/client'
+import { technicianClient } from './api/technicians'
+import { orderClient } from './api/orders'
+import { serviceClient } from './api/services'
+import { AdminConsole } from './components/AdminConsole'
+import { TechnicianWorkbench } from './components/TechnicianWorkbench'
 
-interface BookingDraft { dateLabel: string; time: string; intensity: string; address: Address; note: string }
+interface BookingDraft { dateLabel: string; dateKey: string; time: string; intensity: string; address: Address; note: string }
 interface Settlement { discount: number; paidAmount: number; couponLabel: string }
 const defaultAddress: Address = { id: 'home', label: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号' }
 
 export function App() {
   const [authenticated, setAuthenticated] = usePersistedState('luohan_auth_v2', false)
+  const [sessionUser, setSessionUser] = usePersistedState<SessionUser | null>('luohan_session_user_v1', null)
   const [order, setOrder] = usePersistedState<Order | null>('luohan_order_v2', null)
   const [screen, setScreen] = useState<Screen>('home')
   const [technicians, setTechnicians] = useState(seedTechnicians)
+  const [availableServices, setAvailableServices] = useState(services)
   const [selectedTechId, setSelectedTechId] = useState(seedTechnicians[0].id)
   const [selectedService, setSelectedService] = useState<Service>(services[0])
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot>({ dateIndex: 0, dateLabel: '今天', time: '19:00' })
-  const [draft, setDraft] = useState<BookingDraft>({ dateLabel: '今天', time: '19:00', intensity: '适中', address: defaultAddress, note: '' })
+  const [draft, setDraft] = useState<BookingDraft>({ dateLabel: '今天', dateKey: '', time: '19:00', intensity: '适中', address: defaultAddress, note: '' })
   const [toast, setToast] = useState('')
+  const toastTimer = useRef<number | null>(null)
   const technician = technicians.find((item) => item.id === selectedTechId) ?? technicians[0]
   const orderTechnician = order ? technicians.find((item) => item.id === order.techId) : undefined
-  const orderService = order ? services.find((item) => item.id === order.serviceId) : undefined
+  const orderService = order ? availableServices.find((item) => item.id === order.serviceId) : undefined
+  const technicianServices = availableServices.filter((item) => !technician.serviceIds || technician.serviceIds.includes(item.id))
+
+  useEffect(() => {
+    if (!authenticated || sessionUser?.role !== 'USER' || !hasApiSession()) return
+    Promise.all([technicianClient.list(), orderClient.list(), serviceClient.list()]).then(([remoteTechnicians, remoteOrders, remoteServices]) => {
+      setTechnicians(remoteTechnicians.map((item) => ({
+        ...item,
+        img: item.imageKey.startsWith('data:image/') ? item.imageKey : item.imageKey === 'default' ? '/luohan-logo.jpg' : seedTechnicians.find((seed) => seed.id === item.id)?.img ?? seedTechnicians[0].img,
+      })))
+      setAvailableServices(remoteServices)
+      setOrder(remoteOrders[0] ?? null)
+    }).catch(() => {
+      // Keep the local demo data available if the API is temporarily offline.
+    })
+  }, [authenticated, sessionUser?.role, setOrder])
+
+  useEffect(() => {
+    if (!authenticated || !hasApiSession()) return
+    authClient.me().then(setSessionUser).catch(() => { authClient.logout(); setAuthenticated(false); setSessionUser(null) })
+  }, [authenticated, setAuthenticated, setSessionUser])
 
   useEffect(() => {
     const timer = setInterval(() => setTechnicians((current) => current.map((tech) => ({ ...tech, lat: tech.lat + (Math.random() - .5) * .00035, lng: tech.lng + (Math.random() - .5) * .00035 }))), 2200)
     return () => clearInterval(timer)
   }, [])
 
-  const notify = (message: string) => { setToast(message); setTimeout(() => setToast(''), 1800) }
+  const notify = useCallback((message: string) => {
+    setToast(message)
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(''), 1800)
+  }, [])
+  useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current) }, [])
   const navigate = (next: Screen) => {
     const update = () => setScreen(next)
     if ('startViewTransition' in document) (document as Document & { startViewTransition: (callback: () => void) => void }).startViewTransition(update)
     else update()
   }
-  const openTechnician = (id: number) => { setSelectedTechId(id); setSelectedService(services[0]); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('detail') }
-  const pay = (paymentMethod: string, settlement: Settlement) => {
-    const nextOrder: Order = { id: `LH${Date.now().toString().slice(-8)}`, techId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, status: 0, etaSeconds: 720, originalPrice: selectedService.price, ...settlement }
+  const openTechnician = (id: number) => { const tech = technicians.find((item) => item.id === id); setSelectedTechId(id); setSelectedService(availableServices.find((item) => !tech?.serviceIds || tech.serviceIds.includes(item.id)) ?? availableServices[0] ?? services[0]); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('detail') }
+  const pay = async (paymentMethod: string, settlement: Settlement) => {
+    const localOrder: Order = { id: `LH${Date.now().toString().slice(-8)}`, techId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, status: 0, etaSeconds: 720, originalPrice: selectedService.price, ...settlement }
+    let nextOrder = localOrder
+    if (hasApiSession()) {
+      try {
+        nextOrder = await orderClient.create({ technicianId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, ...settlement })
+      } catch (error) {
+        if (!(error instanceof ApiUnavailableError)) {
+          notify(error instanceof Error ? error.message : '下单失败，请稍后重试')
+          throw error
+        }
+        notify('后端暂时离线，本次订单保存在当前设备')
+      }
+    }
     setOrder(nextOrder); navigate('success'); notify('支付成功，预约已提交')
   }
-  const updateOrder = useCallback((next: Order) => setOrder(next), [setOrder])
-  const rebook = (techId: number, serviceId: string) => { const service = services.find((item) => item.id === serviceId) ?? services[0]; setSelectedTechId(techId); setSelectedService(service); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('booking'); notify('已载入历史预约配置') }
+  const updateOrder = useCallback((next: Order) => {
+    const shouldPersistStatus = Boolean(order && next.id === order.id && next.status !== order.status && hasApiSession())
+    setOrder(next)
+    if (shouldPersistStatus) orderClient.advance(next.id).then(setOrder).catch((error) => {
+      setOrder(order)
+      notify(error instanceof Error ? error.message : '状态更新失败')
+    })
+  }, [order, setOrder])
+  const cancelOrder = useCallback(() => {
+    const current = order
+    setOrder(null)
+    notify('订单已取消，退款将原路退回')
+    if (current && hasApiSession()) orderClient.cancel(current.id).catch((error) => {
+      setOrder(current)
+      notify(error instanceof Error ? error.message : '取消订单失败')
+    })
+  }, [order, setOrder])
+  const login = async (phone: string, method: LoginMethod, credential: string) => {
+    try {
+      const user = await authClient.login(phone, method, credential)
+      setSessionUser(user)
+      setAuthenticated(true); notify('登录成功，数据已与后端同步')
+    } catch (error) {
+      if (!(error instanceof ApiUnavailableError)) throw error
+      const demoCredentials: Record<string, { code?: string; password: string }> = {
+        '13800138000': { code: '888888', password: 'Demo@2026' },
+        '13900139000': { code: '888888', password: 'Demo@2026' },
+        '13700137000': { password: 'Luohan@2026' },
+      }
+      const account = demoCredentials[phone]
+      if (!account || credential !== account[method]) throw new Error('账号或凭据不正确')
+      const role: SessionUser['role'] = phone === '13700137000' ? 'ADMIN' : phone === '13900139000' ? 'TECHNICIAN' : 'USER'
+      setSessionUser({ id: `offline-${role}`, phone, name: role === 'ADMIN' ? '平台管理员' : role === 'TECHNICIAN' ? '陈静技师' : '罗女士', role })
+      setAuthenticated(true); notify('后端未启动，已进入本机演示模式')
+    }
+  }
+  const register = async (name: string, phone: string, password: string) => {
+    const user = await authClient.register(name, phone, password)
+    setSessionUser(user); setAuthenticated(true); notify('注册成功，欢迎使用罗汉到家')
+  }
+  const logout = () => { authClient.logout(); setAuthenticated(false); setSessionUser(null); setOrder(null); navigate('home') }
+  const rebook = (techId: number, serviceId: string) => { const service = availableServices.find((item) => item.id === serviceId) ?? availableServices[0] ?? services[0]; setSelectedTechId(techId); setSelectedService(service); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('booking'); notify('已载入历史预约配置') }
   const showNav = ['home','orders','messages','profile'].includes(screen)
 
   const content = useMemo(() => {
-    if (screen === 'detail') return <TechnicianDetail technician={technician} services={services} selected={selectedService} selectedSlot={selectedSlot} onSelect={setSelectedService} onSlotSelect={(slot) => { setSelectedSlot(slot); notify(`已选择 ${slot.dateLabel} ${slot.time}`) }} onBack={() => navigate('home')} onBook={() => navigate('booking')}/>
+    if (screen === 'detail') return <TechnicianDetail technician={technician} services={technicianServices} selected={selectedService} selectedSlot={selectedSlot} onSelect={setSelectedService} onSlotSelect={(slot) => { setSelectedSlot(slot); notify(`已选择 ${slot.dateLabel} ${slot.time}`) }} onBack={() => navigate('home')} onBook={() => navigate('booking')}/>
     if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} initialDateIndex={selectedSlot.dateIndex} initialTime={selectedSlot.time} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
     if (screen === 'payment') return <PaymentScreen technician={technician} service={selectedService} schedule={`${draft.dateLabel} ${draft.time}`} onBack={() => navigate('booking')} onPaid={pay}/>
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
-    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={() => { setOrder(null); notify('订单已取消，退款将原路退回') }} onNotify={notify}/>
+    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onNotify={notify}/>
     if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
-    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onRebook={rebook} onLogout={() => { setAuthenticated(false); navigate('home') }}/>
+    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onRebook={rebook} onLogout={logout}/>
     return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate} onNotify={notify}/>
-  }, [screen, technician, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, updateOrder])
+  }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, updateOrder, cancelOrder])
 
-  return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={() => { setAuthenticated(true); notify('登录成功，欢迎回来') }}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>
+  if (authenticated && sessionUser?.role === 'ADMIN') return <><AdminConsole user={sessionUser} onLogout={logout} onNotify={notify}/><div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
+  if (authenticated && sessionUser?.role === 'TECHNICIAN') return <><TechnicianWorkbench user={sessionUser} onLogout={logout} onNotify={notify}/><div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
+  return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={login} onRegister={register}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>
 }

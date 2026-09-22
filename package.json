@@ -4,23 +4,52 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "vite --host 0.0.0.0",
-    "build": "npm run check:buttons && npm run check:stateful && tsc -b && vite build",
+    "dev:server": "tsx watch server/src/app.ts",
+    "dev:all": "concurrently -n WEB,API -c cyan,green \"npm:dev\" \"npm:dev:server\"",
+    "build": "npm run check:buttons && npm run check:stateful && npm run check:login-layout && npm run typecheck && npm run typecheck:server && vite build",
+    "build:server": "tsc -p server/tsconfig.json",
     "check:buttons": "node scripts/check-button-feedback.mjs",
     "check:stateful": "node scripts/check-stateful-feedback.mjs",
+    "check:login-layout": "node scripts/check-login-layout.mjs",
+    "check:role-workspaces": "node scripts/check-role-workspaces.mjs",
     "typecheck": "tsc -b --pretty false",
+    "typecheck:server": "tsc -p server/tsconfig.json --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "node scripts/ensure-database.mjs && prisma db push",
+    "db:seed": "prisma db seed",
+    "db:setup": "npm run db:push && npm run db:seed",
+    "start:server": "node dist-server/app.js",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
+    "@prisma/client": "^6.19.0",
     "@vitejs/plugin-react": "latest",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "vite": "latest"
+    "vite": "latest",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
+    "concurrently": "^9.2.1",
+    "prisma": "^6.19.0",
+    "puppeteer-core": "^25.11.0",
+    "tsx": "^4.23.15",
     "typescript": "latest"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

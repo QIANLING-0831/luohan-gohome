@@ -4,4 +4,5 @@ import './styles.css'
 import './interaction.css'
 import { App } from './App'
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>)
+const application = <App/>
+createRoot(document.getElementById('root')!).render(import.meta.env.DEV ? <StrictMode>{application}</StrictMode> : application)

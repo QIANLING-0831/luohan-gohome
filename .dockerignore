@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.git
+node_modules
+dist
+dist-server
+prisma/*.db
+prisma/*.db-journal
+*.sqlite
+*.sqlite-journal

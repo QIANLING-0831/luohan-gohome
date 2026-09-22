@@ -1,0 +1,49 @@
+const c = require('./core')
+
+async function snapshot() { const [orders, users, technicians, services, links] = await Promise.all(['Order', 'User', 'Technician', 'Service', 'TechnicianService'].map(c.all)); return { orders, users, technicians, services, links } }
+function orderSummary(o, s) { const user = s.users.find(u => u.id === o.userId); const tech = s.technicians.find(t => t.id === o.technicianId); const service = s.services.find(v => v.id === o.serviceId); return { id: o.id, status: o.status, statusIndex: c.statuses.indexOf(o.status), customer: user?.name || '未知用户', phone: c.mask(user?.phone || ''), technician: tech?.name || '已归档技师', service: service?.name || '服务项目', amount: o.paidAmount, schedule: `${o.dateLabel} ${c.beijingSlot(o.appointmentAt).split('|')[1]}`, address: o.addressLabel, createdAt: c.iso(o.createdAt) } }
+function managedTech(t, s) { return { id: t.id, name: t.name, title: t.title, rating: t.rating, active: t.active, archived: Boolean(t.archivedAt), imageKey: t.imageKey, orderCount: s.orders.filter(o => o.technicianId === t.id).length, price: t.price, experienceYears: t.experienceYears, onTimeRate: t.arrivalTotal ? Math.round(t.onTimeArrivals / t.arrivalTotal * 100) : 100, workStart: t.workStart, workEnd: t.workEnd, workDays: JSON.parse(t.workDays || '[]'), services: s.links.filter(link => link.technicianId === t.id).map(link => s.services.find(service => service.id === link.serviceId)?.name).filter(Boolean) } }
+function validateSchedule(input) { c.assert(/^\d{2}:\d{2}$/.test(input.workStart || '') && /^\d{2}:\d{2}$/.test(input.workEnd || '') && input.workStart < input.workEnd, 400, '接单结束时间必须晚于开始时间'); c.assert(Array.isArray(input.workDays) && input.workDays.length > 0 && input.workDays.every(day => Number.isInteger(day) && day >= 0 && day <= 6), 400, '请至少选择一个接单日') }
+function validateServices(ids, s) { c.assert(Array.isArray(ids) && ids.length > 0 && ids.every(id => s.services.some(v => v.id === id && v.active)), 400, '请选择有效的服务项目') }
+function validateImage(value) { c.assert(typeof value === 'string' && (['default', 'chen', 'zhou', 'lin'].includes(value) || /^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && Buffer.byteLength(value.split(',')[1], 'base64') <= 100 * 1024), 400, '头像格式无效或超过 100 KB') }
+async function handle(event, path, method) {
+  c.actor(event, 'ADMIN')
+  const s = await snapshot()
+  const sorted = s.orders.slice().sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt)))
+  if (path === '/api/admin/dashboard' && method === 'GET') {
+    const today = new Date()
+    const trend = Array.from({ length: 7 }, (_, i) => { const date = new Date(today); date.setDate(today.getDate() - (6 - i)); const day = date.toISOString().slice(0, 10); return { label: `${date.getMonth() + 1}/${date.getDate()}`, count: s.orders.filter(o => c.iso(o.createdAt).slice(0, 10) === day).length } })
+    return { metrics: { totalOrders: s.orders.length, pendingOrders: s.orders.filter(o => o.status === 'PENDING').length, revenue: s.orders.filter(o => o.status === 'COMPLETED').reduce((n, o) => n + o.paidAmount, 0), activeTechnicians: s.technicians.filter(t => t.active && !t.archivedAt).length, userCount: s.users.filter(u => u.role === 'USER').length }, statusCounts: c.statuses.map(status => ({ status, count: s.orders.filter(o => o.status === status).length })), trend, recentOrders: sorted.slice(0, 8).map(o => orderSummary(o, s)) }
+  }
+  if (path === '/api/admin/orders' && method === 'GET') return sorted.map(o => orderSummary(o, s))
+  if (path === '/api/admin/users' && method === 'GET') return s.users.filter(u => u.role === 'USER').map(u => { const own = sorted.filter(o => o.userId === u.id); const completed = own.filter(o => o.status === 'COMPLETED'); let preferences = []; try { preferences = JSON.parse(u.preferences || '[]') } catch {} return { id: u.id, name: u.name, phone: u.phone, points: u.points, preferences, orderCount: own.length, completedOrders: completed.length, totalSpent: completed.reduce((n, o) => n + o.paidAmount, 0), lastOrderAt: own[0] ? c.iso(own[0].createdAt) : null, createdAt: c.iso(u.createdAt) } })
+  if (path === '/api/admin/technicians' && method === 'GET') return s.technicians.sort((a, b) => Number(Boolean(a.archivedAt)) - Number(Boolean(b.archivedAt)) || a.id - b.id).map(t => managedTech(t, s))
+  if (path === '/api/admin/services' && method === 'GET') return s.services.sort((a, b) => a.name.localeCompare(b.name, 'zh')).map(v => ({ id: v.id, name: v.name, description: v.description, price: v.price, duration: v.duration, active: v.active, technicianCount: s.links.filter(link => link.serviceId === v.id && s.technicians.some(t => t.id === link.technicianId && !t.archivedAt)).length }))
+  if (path === '/api/admin/services' && method === 'POST') { const input = c.body(event); c.assert(typeof input.name === 'string' && input.name.trim().length >= 2 && input.name.trim().length <= 30 && typeof input.description === 'string' && input.description.trim().length >= 4 && Number.isInteger(input.price) && input.price >= 1 && input.price <= 9999 && Number.isInteger(input.duration) && input.duration >= 15 && input.duration <= 240, 400, '请填写有效的服务名称、说明、价格和时长'); c.assert(!s.services.some(v => v.name === input.name.trim()), 409, '服务名称已存在'); const id = `service-${Date.now().toString(36)}`; c.result(await c.db.from('Service').insert({ id, name: input.name.trim(), description: input.description.trim(), price: input.price, duration: input.duration, active: true })); return { id, name: input.name.trim(), description: input.description.trim(), price: input.price, duration: input.duration, active: true, technicianCount: 0 } }
+  const serviceMatch = path.match(/^\/api\/admin\/services\/([^/]+)$/)
+  if (serviceMatch && method === 'PATCH') { const current = s.services.find(v => v.id === serviceMatch[1]); c.assert(current, 404, '服务项目不存在'); const input = c.body(event); c.assert(typeof input.active === 'boolean', 400, '状态无效'); c.result(await c.db.from('Service').update({ active: input.active }).eq('id', current.id)); return { id: current.id, active: input.active } }
+  if (path === '/api/admin/technicians' && method === 'POST') {
+    const input = c.body(event)
+    c.assert(typeof input.name === 'string' && input.name.trim().length >= 2 && typeof input.title === 'string' && input.title.trim().length >= 2 && typeof input.intro === 'string' && input.intro.trim().length >= 2 && Number.isFinite(input.price) && input.price > 0 && Number.isInteger(input.experienceYears) && input.experienceYears >= 0 && input.experienceYears <= 60, 400, '请填写有效的姓名、职称、简介、价格和从业经验')
+    c.assert(typeof input.imageKey === 'string' && input.imageKey.startsWith('data:image/'), 400, '新增技师必须上传头像照片')
+    validateImage(input.imageKey)
+    validateServices(input.serviceIds, s)
+    validateSchedule(input)
+    const created = c.result(await c.db.from('Technician').insert({ name: input.name.trim(), title: input.title.trim(), rating: 5, orderCount: 0, latitude: 31.2304, longitude: 121.4737, price: input.price, imageKey: input.imageKey, intro: input.intro || '', active: true, experienceYears: input.experienceYears, arrivalTotal: 0, onTimeArrivals: 0, workStart: input.workStart, workEnd: input.workEnd, workDays: JSON.stringify([...new Set(input.workDays)].sort()) }).select('*'))[0]
+    c.assert(created, 500, '创建技师失败')
+    for (const serviceId of [...new Set(input.serviceIds)]) c.result(await c.db.from('TechnicianService').insert({ technicianId: created.id, serviceId }))
+    return managedTech(created, await snapshot())
+  }
+  const match = path.match(/^\/api\/admin\/technicians\/(\d+)(?:\/(status|restore))?$/)
+  if (match) {
+    const id = Number(match[1]); const current = s.technicians.find(t => t.id === id)
+    c.assert(current, 404, '技师不存在')
+    if (method === 'PATCH' && match[2] === 'restore') { c.assert(current.archivedAt, 409, '该技师当前未归档'); c.result(await c.db.from('Technician').update({ active: false, archivedAt: null }).eq('id', id)); return { id, archived: false, active: false } }
+    c.assert(!current.archivedAt, 409, '该技师已归档，请先恢复')
+    if (method === 'DELETE' && !match[2]) { c.assert(!s.orders.some(o => o.technicianId === id && !['COMPLETED', 'CANCELLED'].includes(o.status)), 409, '该技师还有进行中的订单，请先完成或取消订单'); c.result(await c.db.from('Technician').update({ active: false, archivedAt: new Date().toISOString() }).eq('id', id)); return { id, archived: true } }
+    if (method === 'PATCH' && match[2] === 'status') { const { active } = c.body(event); c.assert(typeof active === 'boolean', 400, '状态无效'); c.result(await c.db.from('Technician').update({ active }).eq('id', id)); return { id, active } }
+    if (method === 'PATCH' && !match[2]) { const input = c.body(event); c.assert(typeof input.title === 'string' && Number.isFinite(input.price) && input.price > 0 && Number.isInteger(input.experienceYears) && input.experienceYears >= 0 && input.experienceYears <= 60, 400, '技师资料无效'); validateServices(input.serviceIds, s); validateSchedule(input); if (input.imageKey !== undefined) validateImage(input.imageKey); const changes = { title: input.title.trim(), price: input.price, experienceYears: input.experienceYears, workStart: input.workStart, workEnd: input.workEnd, workDays: JSON.stringify([...new Set(input.workDays)].sort()) }; if (input.imageKey) changes.imageKey = input.imageKey; c.result(await c.db.from('Technician').update(changes).eq('id', id)); c.result(await c.db.from('TechnicianService').delete().eq('technicianId', id)); for (const serviceId of [...new Set(input.serviceIds)]) c.result(await c.db.from('TechnicianService').insert({ technicianId: id, serviceId })); return managedTech({ ...current, ...changes }, await snapshot()) }
+  }
+  throw new c.HttpError(404, '接口不存在')
+}
+module.exports = { handle }

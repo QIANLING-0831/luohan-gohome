@@ -11,6 +11,12 @@ export interface Technician {
   price: number
   img: string
   intro: string
+  serviceIds?: string[]
+  experienceYears: number
+  onTimeRate: number
+  workStart: string
+  workEnd: string
+  workDays: number[]
 }
 
 export interface Service {
@@ -18,6 +24,7 @@ export interface Service {
   name: string
   desc: string
   price: number
+  duration?: number
 }
 
 export interface Address {

@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  phone        String        @unique
+  name         String
+  role         String        @default("USER")
+  points       Int           @default(1280)
+  preferences  String        @default("[]")
+  passwordHash String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  orders       Order[]
+  favorites    Favorite[]
+  pointRecords PointRecord[]
+  technicianProfile Technician?
+  auditLogs     AuditLog[]
+}
+
+model Technician {
+  id         Int                 @id @default(autoincrement())
+  name       String
+  title      String
+  rating     Float
+  orderCount Int
+  latitude   Float
+  longitude  Float
+  price      Int
+  imageKey   String
+  intro      String
+  active     Boolean             @default(true)
+  archivedAt DateTime?
+  experienceYears Int              @default(1)
+  arrivalTotal    Int              @default(0)
+  onTimeArrivals  Int              @default(0)
+  workStart       String           @default("10:00")
+  workEnd         String           @default("22:00")
+  workDays        String           @default("[0,1,2,3,4,5,6]")
+  services   TechnicianService[]
+  orders     Order[]
+  favorites  Favorite[]
+  userId     String?             @unique
+  user       User?               @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  metadata   String   @default("{}")
+  createdAt  DateTime @default(now())
+  actor      User     @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt])
+}
+
+model Service {
+  id          String              @id
+  name        String
+  description String
+  price       Int
+  duration    Int
+  active      Boolean             @default(true)
+  technicians TechnicianService[]
+  orders      Order[]
+}
+
+model TechnicianService {
+  technicianId Int
+  serviceId    String
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  service      Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([technicianId, serviceId])
+}
+
+model Order {
+  id            String           @id
+  userId        String
+  technicianId  Int
+  serviceId     String
+  status        String           @default("PENDING")
+  dateLabel     String
+  appointmentAt DateTime
+  intensity     String
+  paymentMethod String
+  etaSeconds    Int              @default(720)
+  addressLabel  String
+  addressDetail String
+  note          String           @default("")
+  originalPrice Int
+  discount      Int              @default(0)
+  paidAmount    Int
+  couponLabel   String           @default("")
+  reviewed      Boolean          @default(false)
+  reviewRating  Int?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  user          User             @relation(fields: [userId], references: [id])
+  technician    Technician       @relation(fields: [technicianId], references: [id])
+  service       Service          @relation(fields: [serviceId], references: [id])
+  statusLogs    OrderStatusLog[]
+
+  @@index([userId, createdAt])
+  @@index([technicianId, appointmentAt])
+}
+
+model OrderStatusLog {
+  id        Int      @id @default(autoincrement())
+  orderId   String
+  status    String
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Favorite {
+  userId       String
+  technicianId Int
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@id([userId, technicianId])
+}
+
+model PointRecord {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
