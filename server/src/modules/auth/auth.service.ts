@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken'
 import { database } from '../../shared/database.js'
 import { AppError } from '../../shared/errors.js'
 import { hashPassword, verifyPassword } from '../../shared/password.js'
+import { sessionVersion } from '../../shared/session-version.js'
 
 const demoPhones = new Set(['13800138000', '13900139000', '13700137000'])
 
@@ -17,7 +18,7 @@ export async function login(phone: string, method: 'code' | 'password', credenti
   }
   const secret = process.env.JWT_SECRET
   if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) throw new AppError(503, '服务端登录配置未完成', 'AUTH_NOT_CONFIGURED')
-  const token = jwt.sign({ sub: user.id, role: user.role }, secret ?? 'luohan-development-secret', { expiresIn: '7d' })
+  const token = jwt.sign({ sub: user.id, role: user.role, ver: sessionVersion(user.passwordHash) }, secret ?? 'luohan-development-secret', { expiresIn: '7d' })
   return { token, user: { id: user.id, phone: user.phone, name: user.name, role: user.role } }
 }
 

@@ -134,7 +134,7 @@ npm run preview
 
 ## 相关文档
 
-- [后端技术栈与架构说明](docs/BACKEND_TECH_STACK.md)
+- [后端技术栈、架构与后续规划](docs/BACKEND_TECH_STACK.md)
 - [技术实现说明](docs/技术实现说明.md)
 - [CSDN 文章草稿](docs/CSDN文章草稿.md)
 - [Word 技术文档](deliverables/罗汉到家技术选型与实现说明.docx)

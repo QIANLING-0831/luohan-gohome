@@ -11,14 +11,23 @@ async function request(path, method, token, body) {
   return payload.data
 }
 
+async function requestStatus(path, token) { return fetch(`${api}${path}`, { headers: { authorization: `Bearer ${token}` } }) }
+
 const session = await request('/api/auth/login', 'POST', null, { phone, method: 'password', credential: original })
 let changed = false
+let currentToken = session.token
 try {
   await request('/api/auth/password', 'PUT', session.token, { currentPassword: original, newPassword: temporary })
   changed = true
+  const stale = await requestStatus('/api/auth/me', session.token)
+  if (stale.status !== 401) throw new Error(`旧登录令牌应失效，实际状态 ${stale.status}`)
   const verified = await request('/api/auth/login', 'POST', null, { phone, method: 'password', credential: temporary })
+  currentToken = verified.token
   if (verified.user.phone !== phone) throw new Error('新密码登录到了错误账号')
-  console.log('PASS: 自注册账号修改密码后可用新密码登录')
+  console.log('PASS: 修改密码后旧令牌失效，新密码可重新登录')
 } finally {
-  if (changed) await request('/api/auth/password', 'PUT', session.token, { currentPassword: temporary, newPassword: original })
+  if (changed) {
+    try { await request('/api/auth/password', 'PUT', currentToken, { currentPassword: temporary, newPassword: original }) }
+    catch { const recovery = await request('/api/auth/login', 'POST', null, { phone, method: 'password', credential: temporary }); await request('/api/auth/password', 'PUT', recovery.token, { currentPassword: temporary, newPassword: original }) }
+  }
 }

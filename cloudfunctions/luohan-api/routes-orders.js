@@ -2,7 +2,7 @@ const crypto = require('node:crypto')
 const c = require('./core')
 
 async function handle(event, path, method) {
-  const identity = c.actor(event, 'USER')
+  const identity = await c.authenticatedActor(event, 'USER')
   if (path === '/api/orders' && method === 'GET') { const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); return rows.sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(c.presentOrder) }
   if (path === '/api/orders' && method === 'POST') {
     const input = c.body(event)

@@ -155,6 +155,19 @@ export async function resetTechnicianPassword(technicianId: number, password: st
   return { id: technicianId, reset: true }
 }
 
+export async function bindTechnicianAccount(actorId: string, technicianId: number, input: { phone: string; password: string }) {
+  const technician = await database.technician.findUnique({ where: { id: technicianId } })
+  if (!technician) throw new AppError(404, '技师不存在')
+  if (technician.userId) throw new AppError(409, '该技师已经绑定登录账号')
+  if (await database.user.findUnique({ where: { phone: input.phone } })) throw new AppError(409, '该手机号已被其他账号使用')
+  await database.$transaction(async (tx) => {
+    const user = await tx.user.create({ data: { name: technician.name, phone: input.phone, passwordHash: await hashPassword(input.password), role: 'TECHNICIAN', points: 0, preferences: '[]' } })
+    await tx.technician.update({ where: { id: technicianId }, data: { userId: user.id } })
+    await tx.auditLog.create({ data: { actorId, action: 'TECHNICIAN_ACCOUNT_BOUND', targetType: 'Technician', targetId: String(technicianId), metadata: JSON.stringify({ phone: input.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') }) } })
+  })
+  return { id: technicianId, loginPhone: input.phone }
+}
+
 export async function setTechnicianActive(actorId: string, technicianId: number, active: boolean) {
   const technician = await database.$transaction(async (tx) => {
     const updated = await tx.technician.update({ where: { id: technicianId, archivedAt: null }, data: { active } })

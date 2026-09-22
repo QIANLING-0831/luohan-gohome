@@ -1,4 +1,5 @@
 const c = require('./core')
+const crypto = require('node:crypto')
 
 async function snapshot() { const [orders, users, technicians, services, links] = await Promise.all(['Order', 'User', 'Technician', 'Service', 'TechnicianService'].map(c.all)); return { orders, users, technicians, services, links } }
 function orderSummary(o, s) { const user = s.users.find(u => u.id === o.userId); const tech = s.technicians.find(t => t.id === o.technicianId); const service = s.services.find(v => v.id === o.serviceId); return { id: o.id, status: o.status, statusIndex: c.statuses.indexOf(o.status), customer: user?.name || '未知用户', phone: c.mask(user?.phone || ''), technician: tech?.name || '已归档技师', service: service?.name || '服务项目', amount: o.paidAmount, schedule: `${o.dateLabel} ${c.beijingSlot(o.appointmentAt).split('|')[1]}`, address: o.addressLabel, createdAt: c.iso(o.createdAt) } }
@@ -7,7 +8,7 @@ function validateSchedule(input) { c.assert(/^\d{2}:\d{2}$/.test(input.workStart
 function validateServices(ids, s) { c.assert(Array.isArray(ids) && ids.length > 0 && ids.every(id => s.services.some(v => v.id === id && v.active)), 400, '请选择有效的服务项目') }
 function validateImage(value) { c.assert(typeof value === 'string' && (['default', 'chen', 'zhou', 'lin'].includes(value) || /^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && Buffer.byteLength(value.split(',')[1], 'base64') <= 100 * 1024), 400, '头像格式无效或超过 100 KB') }
 async function handle(event, path, method) {
-  c.actor(event, 'ADMIN')
+  await c.authenticatedActor(event, 'ADMIN')
   const s = await snapshot()
   const sorted = s.orders.slice().sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt)))
   if (path === '/api/admin/dashboard' && method === 'GET') {
@@ -42,12 +43,13 @@ async function handle(event, path, method) {
     for (const serviceId of [...new Set(input.serviceIds)]) c.result(await c.db.from('TechnicianService').insert({ technicianId: created.id, serviceId }))
     return managedTech(created, await snapshot())
   }
-  const match = path.match(/^\/api\/admin\/technicians\/(\d+)(?:\/(status|restore|reset-password))?$/)
+  const match = path.match(/^\/api\/admin\/technicians\/(\d+)(?:\/(status|restore|reset-password|bind-account))?$/)
   if (match) {
     const id = Number(match[1]); const current = s.technicians.find(t => t.id === id)
     c.assert(current, 404, '技师不存在')
     if (method === 'PATCH' && match[2] === 'restore') { c.assert(current.archivedAt, 409, '该技师当前未归档'); c.result(await c.db.from('Technician').update({ active: false, archivedAt: null }).eq('id', id)); return { id, archived: false, active: false } }
     if (method === 'POST' && match[2] === 'reset-password') { const input = c.body(event); c.assert(typeof input.password === 'string' && input.password.length >= 6 && input.password.length <= 64, 400, '新密码需要 6–64 位'); const account = s.users.find(user => user.id === current.userId); c.assert(account, 409, '该技师尚未绑定登录账号'); c.assert(account.phone !== '13900139000', 403, '公共演示技师账号不允许重置密码'); c.result(await c.db.from('User').update({ passwordHash: c.passwordHash(input.password), updatedAt: new Date().toISOString() }).eq('id', account.id)); return { id, reset: true } }
+    if (method === 'POST' && match[2] === 'bind-account') { const input = c.body(event); c.assert(!current.userId, 409, '该技师已经绑定登录账号'); c.assert(/^1\d{10}$/.test(input.phone || ''), 400, '请输入正确的登录手机号'); c.assert(typeof input.password === 'string' && input.password.length >= 6 && input.password.length <= 64, 400, '初始密码需要 6–64 位'); c.assert(!s.users.some(user => user.phone === input.phone), 409, '该手机号已被其他账号使用'); const userId = `tech-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`; const now = new Date().toISOString(); c.result(await c.db.from('User').insert({ id: userId, phone: input.phone, name: current.name, role: 'TECHNICIAN', points: 0, preferences: '[]', passwordHash: c.passwordHash(input.password), createdAt: now, updatedAt: now })); try { c.result(await c.db.from('Technician').update({ userId }).eq('id', id)) } catch (error) { await c.db.from('User').delete().eq('id', userId); throw error } return { id, loginPhone: input.phone } }
     c.assert(!current.archivedAt, 409, '该技师已归档，请先恢复')
     if (method === 'DELETE' && !match[2]) { c.assert(!s.orders.some(o => o.technicianId === id && !['COMPLETED', 'CANCELLED'].includes(o.status)), 409, '该技师还有进行中的订单，请先完成或取消订单'); c.result(await c.db.from('Technician').update({ active: false, archivedAt: new Date().toISOString() }).eq('id', id)); return { id, archived: true } }
     if (method === 'PATCH' && match[2] === 'status') { const { active } = c.body(event); c.assert(typeof active === 'boolean', 400, '状态无效'); c.result(await c.db.from('Technician').update({ active }).eq('id', id)); return { id, active } }

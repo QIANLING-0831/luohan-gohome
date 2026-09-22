@@ -203,7 +203,7 @@ export function App() {
     return <HomeScreen technicians={technicians} favorites={profile?.favoriteIds ?? []} onToggleFavorite={(tech) => void toggleFavorite(tech)} onOpen={openTechnician} onNavigate={navigate}/>
   }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, availableServices, sessionUser, profile, userOrders, updateOrder, cancelOrder, reviewOrder])
 
-  const passwordDialog = <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} onChanged={() => notify('密码修改成功，下次请使用新密码登录')}/>
+  const passwordDialog = <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} onChanged={() => { logout(); notify('密码修改成功，请使用新密码重新登录') }}/>
   if (authenticated && sessionUser?.role === 'ADMIN') return <><AdminConsole user={sessionUser} onLogout={logout} onChangePassword={() => setPasswordOpen(true)} onNotify={notify}/>{passwordDialog}<div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
   if (authenticated && sessionUser?.role === 'TECHNICIAN') return <><TechnicianWorkbench user={sessionUser} onLogout={logout} onChangePassword={() => setPasswordOpen(true)} onNotify={notify}/>{passwordDialog}<div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
   return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={login} onRegister={register}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main>{authenticated && passwordDialog}</>

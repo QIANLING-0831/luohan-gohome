@@ -33,4 +33,5 @@ export const adminClient = {
   archiveTechnician: (id: number) => request<{ id: number; archived: boolean }>(`/api/admin/technicians/${id}`, { method: 'DELETE' }),
   restoreTechnician: (id: number) => request<{ id: number; archived: boolean; active: boolean }>(`/api/admin/technicians/${id}/restore`, { method: 'PATCH' }),
   resetTechnicianPassword: (id: number, password: string) => request<{ id: number; reset: boolean }>(`/api/admin/technicians/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password }) }),
+  bindTechnicianAccount: (id: number, input: { phone: string; password: string }) => request<{ id: number; loginPhone: string }>(`/api/admin/technicians/${id}/bind-account`, { method: 'POST', body: JSON.stringify(input) }),
 }

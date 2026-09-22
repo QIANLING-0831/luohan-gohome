@@ -32,9 +32,10 @@ exports.main = async (event) => {
       c.assert(!await c.first('User', 'phone', input.phone), 409, '该手机号已经注册，请直接登录')
       const id = `user-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`
       const now = new Date().toISOString()
-      c.result(await c.db.from('User').insert({ id, phone: input.phone, name: input.name.trim(), role: 'USER', points: 0, preferences: '[]', passwordHash: c.passwordHash(input.password), createdAt: now, updatedAt: now }))
+      const passwordHash = c.passwordHash(input.password)
+      c.result(await c.db.from('User').insert({ id, phone: input.phone, name: input.name.trim(), role: 'USER', points: 0, preferences: '[]', passwordHash, createdAt: now, updatedAt: now }))
       const user = { id, phone: input.phone, name: input.name.trim(), role: 'USER' }
-      return c.success({ token: c.token({ sub: id, role: 'USER' }), user })
+      return c.success({ token: c.token({ sub: id, role: 'USER', ver: c.sessionVersion({ passwordHash }) }), user })
     }
     if (path === '/api/auth/login' && method === 'POST') {
       const input = c.body(event)
@@ -42,16 +43,16 @@ exports.main = async (event) => {
       c.assert(user, 401, '账号或凭据不正确')
       const verified = input.method === 'password' ? c.passwordMatches(input.credential, user.passwordHash) : input.method === 'code' && user.role !== 'ADMIN' && ['13800138000', '13900139000'].includes(user.phone) && input.credential === '888888'
       c.assert(verified, 401, '账号或凭据不正确')
-      return c.success({ token: c.token({ sub: user.id, role: user.role }), user: { id: user.id, phone: user.phone, name: user.name, role: user.role } })
+      return c.success({ token: c.token({ sub: user.id, role: user.role, ver: c.sessionVersion(user) }), user: { id: user.id, phone: user.phone, name: user.name, role: user.role } })
     }
     if (path === '/api/auth/me' && method === 'GET') {
-      const identity = c.actor(event)
+      const identity = await c.authenticatedActor(event)
       const user = await c.first('User', 'id', identity.sub)
       c.assert(user && user.role === identity.role, 401, '账号不存在')
       return c.success({ id: user.id, phone: user.phone, name: user.name, role: user.role })
     }
     if (path === '/api/auth/password' && method === 'PUT') {
-      const identity = c.actor(event)
+      const identity = await c.authenticatedActor(event)
       const input = c.body(event)
       const user = await c.first('User', 'id', identity.sub)
       c.assert(user, 404, '账号不存在')
@@ -63,7 +64,7 @@ exports.main = async (event) => {
       return c.success({ changed: true })
     }
     if (path === '/api/profile' && method === 'GET') {
-      const identity = c.actor(event, 'USER')
+      const identity = await c.authenticatedActor(event, 'USER')
       const user = await c.first('User', 'id', identity.sub)
       c.assert(user, 404, '用户不存在')
       const [records, favorites] = await Promise.all([
@@ -74,7 +75,7 @@ exports.main = async (event) => {
       return c.success({ name: user.name, phone: user.phone, points: user.points, preferences: data.preferences, addresses: data.addresses, favoriteIds: c.result(favorites).map(item => item.technicianId), pointRecords: c.result(records).sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).slice(0, 20) })
     }
     if (path === '/api/profile/preferences' && method === 'PUT') {
-      const identity = c.actor(event, 'USER')
+      const identity = await c.authenticatedActor(event, 'USER')
       const input = c.body(event)
       c.assert(Array.isArray(input.preferences) && input.preferences.length <= 10 && input.preferences.every(value => typeof value === 'string' && value.length <= 30), 400, '按摩偏好无效')
       const user = await c.first('User', 'id', identity.sub); const data = accountData(user)
@@ -82,7 +83,7 @@ exports.main = async (event) => {
       return c.success({ preferences: input.preferences })
     }
     if (path === '/api/profile/addresses' && method === 'PUT') {
-      const identity = c.actor(event, 'USER'); const input = c.body(event)
+      const identity = await c.authenticatedActor(event, 'USER'); const input = c.body(event)
       c.assert(Array.isArray(input.addresses) && input.addresses.length <= 5 && input.addresses.every(item => typeof item.id === 'string' && item.id.length <= 40 && typeof item.label === 'string' && item.label.trim().length >= 2 && item.label.length <= 40 && typeof item.detail === 'string' && item.detail.trim().length >= 5 && item.detail.length <= 120), 400, '地址信息无效，最多保存 5 个地址')
       const ids = input.addresses.map(item => item.id); c.assert(new Set(ids).size === ids.length, 400, '地址编号重复')
       const addresses = input.addresses.map((item, index) => ({ id: item.id, label: item.label.trim(), detail: item.detail.trim(), isDefault: Boolean(item.isDefault) || !input.addresses.some(value => value.isDefault) && index === 0 })).map((item, index, all) => ({ ...item, isDefault: item.isDefault && all.findIndex(value => value.isDefault) === index }))
@@ -91,7 +92,7 @@ exports.main = async (event) => {
       return c.success({ addresses })
     }
     if (path.startsWith('/api/profile/favorites/') && method === 'PUT') {
-      const identity = c.actor(event, 'USER')
+      const identity = await c.authenticatedActor(event, 'USER')
       const technicianId = Number(path.slice('/api/profile/favorites/'.length))
       c.assert(Number.isSafeInteger(technicianId) && technicianId > 0, 400, '技师编号无效')
       const technician = await c.first('Technician', 'id', technicianId)

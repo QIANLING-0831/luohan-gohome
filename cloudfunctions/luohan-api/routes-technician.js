@@ -1,7 +1,7 @@
 const c = require('./core')
 
 async function handle(event, path, method) {
-  const identity = c.actor(event, 'TECHNICIAN')
+  const identity = await c.authenticatedActor(event, 'TECHNICIAN')
   const profile = await c.first('Technician', 'userId', identity.sub)
   c.assert(profile && !profile.archivedAt, 404, '当前账号没有关联技师档案')
   if (path === '/api/technician-workbench/overview' && method === 'GET') {

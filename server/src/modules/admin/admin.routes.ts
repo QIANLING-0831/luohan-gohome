@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate } from '../../middleware/authentication.js'
 import { authorize } from '../../middleware/authorization.js'
-import { archiveTechnician, createService, createTechnician, getDashboard, listAdminOrders, listAdminServices, listAdminTechnicians, listAdminUsers, resetTechnicianPassword, restoreTechnician, setServiceActive, setTechnicianActive, updateTechnicianProfile } from './admin.service.js'
+import { archiveTechnician, bindTechnicianAccount, createService, createTechnician, getDashboard, listAdminOrders, listAdminServices, listAdminTechnicians, listAdminUsers, resetTechnicianPassword, restoreTechnician, setServiceActive, setTechnicianActive, updateTechnicianProfile } from './admin.service.js'
 
 export const adminRouter = Router()
 adminRouter.use(authenticate, authorize('ADMIN'))
@@ -48,6 +48,10 @@ adminRouter.patch('/technicians/:id/restore', async (req, res, next) => {
 })
 adminRouter.post('/technicians/:id/reset-password', async (req, res, next) => {
   try { const { password } = z.object({ password: z.string().min(6).max(64) }).parse(req.body); res.json({ data: await resetTechnicianPassword(Number(req.params.id), password) }) }
+  catch (error) { next(error) }
+})
+adminRouter.post('/technicians/:id/bind-account', async (req, res, next) => {
+  try { const input = z.object({ phone: z.string().regex(/^1\d{10}$/), password: z.string().min(6).max(64) }).parse(req.body); res.status(201).json({ data: await bindTechnicianAccount(req.auth!.sub, Number(req.params.id), input) }) }
   catch (error) { next(error) }
 })
 adminRouter.patch('/technicians/:id/status', authorize('ADMIN'), async (req, res, next) => {
