@@ -29,7 +29,7 @@ if (!/Panel = ["']chat["'] \| ["']cancel["'] \| ["']review["']/.test(orders) || 
   failures.push('订单页必须包含聊天、取消和评价闭环')
 }
 
-if (!/luohan_favorites_v1/.test(home) || !/tech-search/.test(home) || !/favorite-btn/.test(home) || !/search-empty/.test(home)) {
+if (!/onToggleFavorite/.test(home) || !/tech-search/.test(home) || !/favorite-btn/.test(home) || !/search-empty/.test(home)) {
   failures.push('首页必须支持搜索、收藏筛选和空状态反馈')
 }
 

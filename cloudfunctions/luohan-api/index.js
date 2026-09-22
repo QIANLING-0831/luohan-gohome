@@ -45,6 +45,34 @@ exports.main = async (event) => {
       c.assert(user && user.role === identity.role, 401, '账号不存在')
       return c.success({ id: user.id, phone: user.phone, name: user.name, role: user.role })
     }
+    if (path === '/api/profile' && method === 'GET') {
+      const identity = c.actor(event, 'USER')
+      const user = await c.first('User', 'id', identity.sub)
+      c.assert(user, 404, '用户不存在')
+      const [records, favorites] = await Promise.all([
+        c.db.from('PointRecord').select('*').eq('userId', identity.sub),
+        c.db.from('Favorite').select('*').eq('userId', identity.sub),
+      ])
+      return c.success({ name: user.name, phone: user.phone, points: user.points, preferences: JSON.parse(user.preferences || '[]'), favoriteIds: c.result(favorites).map(item => item.technicianId), pointRecords: c.result(records).sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).slice(0, 20) })
+    }
+    if (path === '/api/profile/preferences' && method === 'PUT') {
+      const identity = c.actor(event, 'USER')
+      const input = c.body(event)
+      c.assert(Array.isArray(input.preferences) && input.preferences.length <= 10 && input.preferences.every(value => typeof value === 'string' && value.length <= 30), 400, '按摩偏好无效')
+      c.result(await c.db.from('User').update({ preferences: JSON.stringify(input.preferences), updatedAt: new Date().toISOString() }).eq('id', identity.sub))
+      return c.success({ preferences: input.preferences })
+    }
+    if (path.startsWith('/api/profile/favorites/') && method === 'PUT') {
+      const identity = c.actor(event, 'USER')
+      const technicianId = Number(path.slice('/api/profile/favorites/'.length))
+      c.assert(Number.isSafeInteger(technicianId) && technicianId > 0, 400, '技师编号无效')
+      const technician = await c.first('Technician', 'id', technicianId)
+      c.assert(technician && technician.active && !technician.archivedAt, 404, '技师不存在或已下架')
+      const existing = c.result(await c.db.from('Favorite').select('*').eq('userId', identity.sub).eq('technicianId', technicianId).limit(1))[0]
+      if (existing) c.result(await c.db.from('Favorite').delete().eq('userId', identity.sub).eq('technicianId', technicianId))
+      else c.result(await c.db.from('Favorite').insert({ userId: identity.sub, technicianId }))
+      return c.success({ favorite: !existing })
+    }
     if (path.startsWith('/api/admin/')) return c.success(await admin.handle(event, path, method))
     if (path.startsWith('/api/orders')) return c.success(await orders.handle(event, path, method))
     if (path.startsWith('/api/technician-workbench/')) return c.success(await technician.handle(event, path, method))

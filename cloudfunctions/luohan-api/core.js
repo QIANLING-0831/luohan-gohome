@@ -11,7 +11,7 @@ class HttpError extends Error {
 function result(value) { if (value.error) throw new Error(value.error.message || '数据库请求失败'); return value.data || [] }
 async function all(table) { return result(await db.from(table).select('*')) }
 async function first(table, column, value) { return result(await db.from(table).select('*').eq(column, value).limit(1))[0] }
-function success(data, statusCode = 200) { return { statusCode, headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': 'https://luohan-home-care-cn.surge.sh', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS', 'access-control-allow-headers': 'Content-Type,Authorization', 'vary': 'Origin' }, body: JSON.stringify({ data }) } }
+function success(data, statusCode = 200) { return { statusCode, headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': 'https://luohan-home-care-cn.surge.sh', 'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'access-control-allow-headers': 'Content-Type,Authorization', 'vary': 'Origin' }, body: JSON.stringify({ data }) } }
 function failure(error) { const status = error instanceof HttpError ? error.status : 500; if (status === 500) console.error(error); return { ...success(null, status), body: JSON.stringify({ error: { code: error.code || 'SERVER_ERROR', message: status === 500 ? '服务器暂时不可用' : error.message } }) } }
 function assert(condition, status, message) { if (!condition) throw new HttpError(status, message) }
 function body(event) { try { return JSON.parse(event.body || '{}') } catch { throw new HttpError(400, '请求内容不是有效的 JSON') } }

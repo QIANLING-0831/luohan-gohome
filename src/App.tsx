@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { services, technicians as seedTechnicians } from './data'
-import type { Address, Order, Screen, Service } from './types'
+import type { Address, Order, Screen, Service, Technician } from './types'
 import { usePersistedState } from './hooks/usePersistedState'
 import { DesktopShowcase } from './components/DesktopShowcase'
 import { LoginScreen } from './components/LoginScreen'
@@ -20,6 +20,8 @@ import { ApiUnavailableError, hasApiSession } from './api/client'
 import { technicianClient } from './api/technicians'
 import { orderClient } from './api/orders'
 import { serviceClient } from './api/services'
+import { profileClient } from './api/profile'
+import type { UserProfile } from './api/profile'
 import { AdminConsole } from './components/AdminConsole'
 import { TechnicianWorkbench } from './components/TechnicianWorkbench'
 
@@ -30,7 +32,9 @@ const defaultAddress: Address = { id: 'home', label: '静安嘉里中心 · 2号
 export function App() {
   const [authenticated, setAuthenticated] = usePersistedState('luohan_auth_v2', false)
   const [sessionUser, setSessionUser] = usePersistedState<SessionUser | null>('luohan_session_user_v1', null)
-  const [order, setOrder] = usePersistedState<Order | null>('luohan_order_v2', null)
+  const [order, setOrder] = useState<Order | null>(null)
+  const [userOrders, setUserOrders] = useState<Order[]>([])
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [screen, setScreen] = useState<Screen>('home')
   const [technicians, setTechnicians] = useState(seedTechnicians)
   const [availableServices, setAvailableServices] = useState(services)
@@ -47,21 +51,31 @@ export function App() {
 
   useEffect(() => {
     if (!authenticated || sessionUser?.role !== 'USER' || !hasApiSession()) return
-    Promise.all([technicianClient.list(), orderClient.list(), serviceClient.list()]).then(([remoteTechnicians, remoteOrders, remoteServices]) => {
+    let cancelled = false
+    Promise.all([technicianClient.list(), orderClient.list(), serviceClient.list(), profileClient.get()]).then(([remoteTechnicians, remoteOrders, remoteServices, remoteProfile]) => {
+      if (cancelled) return
       setTechnicians(remoteTechnicians.map((item) => ({
         ...item,
         img: item.imageKey.startsWith('data:image/') ? item.imageKey : item.imageKey === 'default' ? '/luohan-logo.jpg' : seedTechnicians.find((seed) => seed.id === item.id)?.img ?? seedTechnicians[0].img,
       })))
       setAvailableServices(remoteServices)
       setOrder(remoteOrders[0] ?? null)
+      setUserOrders(remoteOrders)
+      setProfile(remoteProfile)
     }).catch(() => {
-      // Keep the local demo data available if the API is temporarily offline.
+      if (!cancelled) notify('个人数据暂时无法同步，请刷新重试')
     })
-  }, [authenticated, sessionUser?.role, setOrder])
+    return () => { cancelled = true }
+  }, [authenticated, sessionUser?.id])
 
   useEffect(() => {
     if (!authenticated || !hasApiSession()) return
-    authClient.me().then(setSessionUser).catch(() => { authClient.logout(); setAuthenticated(false); setSessionUser(null) })
+    let cancelled = false
+    authClient.me().then((user) => { if (!cancelled) setSessionUser(user) }).catch(() => {
+      if (cancelled) return
+      authClient.logout(); setAuthenticated(false); setSessionUser(null)
+    })
+    return () => { cancelled = true }
   }, [authenticated, setAuthenticated, setSessionUser])
 
   useEffect(() => {
@@ -95,11 +109,12 @@ export function App() {
         notify('后端暂时离线，本次订单保存在当前设备')
       }
     }
-    setOrder(nextOrder); navigate('success'); notify('支付成功，预约已提交')
+    setOrder(nextOrder); setUserOrders((current) => [nextOrder, ...current]); navigate('success'); notify('支付成功，预约已提交')
   }
   const updateOrder = useCallback((next: Order) => {
     const shouldPersistStatus = Boolean(order && next.id === order.id && next.status !== order.status && hasApiSession())
     setOrder(next)
+    setUserOrders((current) => current.map((item) => item.id === next.id ? next : item))
     if (shouldPersistStatus) orderClient.advance(next.id).then(setOrder).catch((error) => {
       setOrder(order)
       notify(error instanceof Error ? error.message : '状态更新失败')
@@ -108,6 +123,7 @@ export function App() {
   const cancelOrder = useCallback(() => {
     const current = order
     setOrder(null)
+    setUserOrders((items) => items.filter((item) => item.id !== current?.id))
     notify('订单已取消，退款将原路退回')
     if (current && hasApiSession()) orderClient.cancel(current.id).catch((error) => {
       setOrder(current)
@@ -117,6 +133,7 @@ export function App() {
   const login = async (phone: string, method: LoginMethod, credential: string) => {
     try {
       const user = await authClient.login(phone, method, credential)
+      setOrder(null); setUserOrders([]); setProfile(null)
       setSessionUser(user)
       setAuthenticated(true); notify('登录成功，数据已与后端同步')
     } catch (error) {
@@ -130,14 +147,24 @@ export function App() {
       if (!account || credential !== account[method]) throw new Error('账号或凭据不正确')
       const role: SessionUser['role'] = phone === '13700137000' ? 'ADMIN' : phone === '13900139000' ? 'TECHNICIAN' : 'USER'
       setSessionUser({ id: `offline-${role}`, phone, name: role === 'ADMIN' ? '平台管理员' : role === 'TECHNICIAN' ? '陈静技师' : '罗女士', role })
+      setOrder(null); setUserOrders([]); setProfile(null)
       setAuthenticated(true); notify('后端未启动，已进入本机演示模式')
     }
   }
   const register = async (name: string, phone: string, password: string) => {
     const user = await authClient.register(name, phone, password)
+    setOrder(null); setUserOrders([]); setProfile(null)
     setSessionUser(user); setAuthenticated(true); notify('注册成功，欢迎使用罗汉到家')
   }
-  const logout = () => { authClient.logout(); setAuthenticated(false); setSessionUser(null); setOrder(null); navigate('home') }
+  const logout = () => { authClient.logout(); setAuthenticated(false); setSessionUser(null); setOrder(null); setUserOrders([]); setProfile(null); navigate('home') }
+  const toggleFavorite = async (tech: Technician) => {
+    if (!profile) return notify('收藏尚未加载，请稍后重试')
+    try {
+      const { favorite } = await profileClient.toggleFavorite(tech.id)
+      setProfile((current) => current ? { ...current, favoriteIds: favorite ? [...new Set([...(current.favoriteIds ?? []), tech.id])] : (current.favoriteIds ?? []).filter((id) => id !== tech.id) } : current)
+      notify(favorite ? `已收藏 ${tech.name}` : `已取消收藏 ${tech.name}`)
+    } catch (error) { notify(error instanceof Error ? error.message : '收藏操作失败，请重试') }
+  }
   const rebook = (techId: number, serviceId: string) => { const service = availableServices.find((item) => item.id === serviceId) ?? availableServices[0] ?? services[0]; setSelectedTechId(techId); setSelectedService(service); setSelectedSlot({ dateIndex: 0, dateLabel: '今天', time: '19:00' }); navigate('booking'); notify('已载入历史预约配置') }
   const showNav = ['home','orders','messages','profile'].includes(screen)
 
@@ -148,9 +175,9 @@ export function App() {
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
     if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onNotify={notify}/>
     if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
-    if (screen === 'profile') return <ProfileScreen order={order} technician={orderTechnician} service={orderService} onNotify={notify} onRebook={rebook} onLogout={logout}/>
-    return <HomeScreen technicians={technicians} onOpen={openTechnician} onNavigate={navigate} onNotify={notify}/>
-  }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, updateOrder, cancelOrder])
+    if (screen === 'profile' && sessionUser) return <ProfileScreen key={sessionUser.id} user={sessionUser} profile={profile} orders={userOrders} technicians={technicians} services={availableServices} onProfileChange={setProfile} onNotify={notify} onRebook={rebook} onLogout={logout}/>
+    return <HomeScreen technicians={technicians} favorites={profile?.favoriteIds ?? []} onToggleFavorite={(tech) => void toggleFavorite(tech)} onOpen={openTechnician} onNavigate={navigate}/>
+  }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, availableServices, sessionUser, profile, userOrders, updateOrder, cancelOrder])
 
   if (authenticated && sessionUser?.role === 'ADMIN') return <><AdminConsole user={sessionUser} onLogout={logout} onNotify={notify}/><div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
   if (authenticated && sessionUser?.role === 'TECHNICIAN') return <><TechnicianWorkbench user={sessionUser} onLogout={logout} onNotify={notify}/><div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
