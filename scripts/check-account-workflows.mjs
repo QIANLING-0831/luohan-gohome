@@ -6,7 +6,7 @@ const browser = await puppeteer.launch({ executablePath: 'C:\\Program Files\\Goo
 async function pageFor(phone, password) {
   const page = await browser.newPage()
   await page.setViewport({ width: 390, height: 844 })
-  await page.evaluateOnNewDocument(() => localStorage.clear())
+  await page.evaluateOnNewDocument(() => { localStorage.clear(); sessionStorage.clear() })
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.click('input[aria-label="手机号"]')
   await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control')

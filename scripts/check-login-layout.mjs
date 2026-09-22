@@ -12,7 +12,7 @@ try {
     const page = await browser.newPage()
     await page.setViewport(viewport)
     await page.goto(process.env.APP_URL ?? 'http://127.0.0.1:5173/', { waitUntil: 'networkidle0' })
-    await page.evaluate(() => localStorage.clear())
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
     await page.reload({ waitUntil: 'networkidle0' })
     const result = await page.evaluate(() => {
       const screen = document.querySelector('.login-screen')

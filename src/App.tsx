@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { services, technicians as seedTechnicians } from './data'
 import type { Address, Order, Screen, Service, Technician } from './types'
-import { usePersistedState } from './hooks/usePersistedState'
+import { useSessionState } from './hooks/useSessionState'
 import { DesktopShowcase } from './components/DesktopShowcase'
 import { LoginScreen } from './components/LoginScreen'
 import { HomeScreen } from './components/HomeScreen'
@@ -16,7 +16,7 @@ import { ProfileScreen } from './components/ProfileScreen'
 import { BottomNav } from './components/BottomNav'
 import { authClient } from './api/auth'
 import type { LoginMethod, SessionUser } from './api/auth'
-import { ApiUnavailableError, hasApiSession } from './api/client'
+import { ApiUnavailableError, hasApiSession, SESSION_EXPIRED_EVENT } from './api/client'
 import { technicianClient } from './api/technicians'
 import { orderClient } from './api/orders'
 import { serviceClient } from './api/services'
@@ -31,8 +31,8 @@ interface Settlement { discount: number; paidAmount: number; couponLabel: string
 const defaultAddress: Address = { id: 'home', label: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号' }
 
 export function App() {
-  const [authenticated, setAuthenticated] = usePersistedState('luohan_auth_v2', false)
-  const [sessionUser, setSessionUser] = usePersistedState<SessionUser | null>('luohan_session_user_v1', null)
+  const [authenticated, setAuthenticated] = useSessionState('luohan_auth_v2', false)
+  const [sessionUser, setSessionUser] = useSessionState<SessionUser | null>('luohan_session_user_v1', null)
   const [order, setOrder] = useState<Order | null>(null)
   const [userOrders, setUserOrders] = useState<Order[]>([])
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -71,7 +71,11 @@ export function App() {
   }, [authenticated, sessionUser?.id])
 
   useEffect(() => {
-    if (!authenticated || !hasApiSession()) return
+    if (!authenticated) return
+    if (!hasApiSession()) {
+      setAuthenticated(false); setSessionUser(null); setOrder(null); setUserOrders([]); setProfile(null); setScreen('home')
+      return
+    }
     let cancelled = false
     authClient.me().then((user) => { if (!cancelled) setSessionUser(user) }).catch(() => {
       if (cancelled) return
@@ -104,6 +108,11 @@ export function App() {
     toastTimer.current = window.setTimeout(() => setToast(''), 1800)
   }, [])
   useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current) }, [])
+  useEffect(() => {
+    const expire = () => { setAuthenticated(false); setSessionUser(null); setOrder(null); setUserOrders([]); setProfile(null); setPasswordOpen(false); setScreen('home'); notify('登录状态已失效，请重新登录') }
+    window.addEventListener(SESSION_EXPIRED_EVENT, expire)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expire)
+  }, [notify, setAuthenticated, setSessionUser])
   const navigate = (next: Screen) => {
     const update = () => setScreen(next)
     if ('startViewTransition' in document) (document as Document & { startViewTransition: (callback: () => void) => void }).startViewTransition(update)

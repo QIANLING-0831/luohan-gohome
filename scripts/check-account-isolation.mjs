@@ -25,7 +25,7 @@ async function loginAndOpenProfile(page, accountPhone, accountPassword) {
   })
   await page.click('button.primary')
   await page.waitForFunction(() => !document.querySelector('.login-screen') || document.querySelector('.auth-error'), { timeout: 10000 }).catch(async (error) => {
-    const state = await page.evaluate(() => ({ phone: document.querySelector('input[aria-label="手机号"]')?.value, passwordLength: document.querySelector('input[aria-label="密码"]')?.value.length, authenticated: localStorage.getItem('luohan_auth_v2'), user: localStorage.getItem('luohan_session_user_v1'), tokenPresent: Boolean(localStorage.getItem('luohan_access_token_v1')), text: document.body.innerText.slice(0, 220) }))
+    const state = await page.evaluate(() => ({ phone: document.querySelector('input[aria-label="手机号"]')?.value, passwordLength: document.querySelector('input[aria-label="密码"]')?.value.length, authenticated: sessionStorage.getItem('luohan_auth_v2'), user: sessionStorage.getItem('luohan_session_user_v1'), tokenPresent: Boolean(sessionStorage.getItem('luohan_access_token_v1')), text: document.body.innerText.slice(0, 220) }))
     throw new Error(`登录页面未离开：${JSON.stringify(state)}`, { cause: error })
   })
   const loginError = await page.$eval('.auth-error', (element) => element.textContent).catch(() => '')
@@ -39,7 +39,7 @@ const browser = await puppeteer.launch({ executablePath, headless: true, args: [
 try {
   const page = await browser.newPage()
   await page.setViewport({ width: 390, height: 844 })
-  await page.evaluateOnNewDocument(() => localStorage.clear())
+  await page.evaluateOnNewDocument(() => { localStorage.clear(); sessionStorage.clear() })
   await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await loginAndOpenProfile(page, phone, password)
   const result = await page.evaluate(({ expected, forbidden }) => {

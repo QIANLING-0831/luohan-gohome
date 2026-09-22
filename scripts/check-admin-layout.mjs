@@ -14,8 +14,9 @@ async function openAdmin(width) {
   await page.setViewport({ width, height: 760 })
   await page.evaluateOnNewDocument(() => {
     localStorage.clear()
-    localStorage.setItem('luohan_auth_v2', 'true')
-    localStorage.setItem('luohan_session_user_v1', JSON.stringify({ id: 'admin-layout-test', phone: '13700137000', name: '平台管理员', role: 'ADMIN' }))
+    sessionStorage.clear()
+    sessionStorage.setItem('luohan_auth_v2', 'true')
+    sessionStorage.setItem('luohan_session_user_v1', JSON.stringify({ id: 'admin-layout-test', phone: '13700137000', name: '平台管理员', role: 'ADMIN' }))
   })
   await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.waitForSelector('.admin-shell')

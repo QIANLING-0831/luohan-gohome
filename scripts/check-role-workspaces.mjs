@@ -9,7 +9,7 @@ async function openRole(role, viewport, onRequest) {
   const page = await browser.newPage()
   await page.setViewport(viewport)
   if (onRequest) page.on('request', onRequest)
-  await page.evaluateOnNewDocument(() => localStorage.clear())
+  await page.evaluateOnNewDocument(() => { localStorage.clear(); sessionStorage.clear() })
   await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.click('.role-select-trigger')
   await page.evaluate((nextRole) => [...document.querySelectorAll('.role-dropdown button')].find((button) => button.textContent?.includes(nextRole === 'ADMIN' ? '管理员' : '技师'))?.click(), role)
