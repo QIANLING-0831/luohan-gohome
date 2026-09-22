@@ -32,7 +32,7 @@ const demoUsers: ManagedUser[] = [
 ]
 const demoDashboard: AdminDashboardData = { metrics: { totalOrders: 128, pendingOrders: 6, revenue: 28640, activeTechnicians: 3, userCount: 386 }, statusCounts: [{status:'PENDING',count:6},{status:'ACCEPTED',count:9},{status:'DEPARTED',count:4},{status:'ARRIVED',count:3},{status:'IN_SERVICE',count:5},{status:'COMPLETED',count:101}], trend: [{label:'9/16',count:12},{label:'9/17',count:16},{label:'9/18',count:19},{label:'9/19',count:15},{label:'9/20',count:23},{label:'9/21',count:18},{label:'9/22',count:25}], recentOrders: demoOrders }
 
-export function AdminConsole({ user, onLogout, onNotify }: { user: SessionUser; onLogout: () => void; onNotify: (message: string) => void }) {
+export function AdminConsole({ user, onLogout, onChangePassword, onNotify }: { user: SessionUser; onLogout: () => void; onChangePassword: () => void; onNotify: (message: string) => void }) {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null)
   const [orders, setOrders] = useState<ManagedOrder[]>([])
@@ -209,7 +209,7 @@ export function AdminConsole({ user, onLogout, onNotify }: { user: SessionUser; 
   return <div className="admin-shell">
     <aside className="admin-sidebar"><div className="admin-logo"><Logo/><span><b>罗汉到家</b><small>运营管理中心</small></span></div><nav>
       {([['dashboard','▦','经营看板'],['orders','▤','订单管理'],['technicians','♙','技师管理'],['users','♧','用户管理']] as const).map(([id, icon, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><i>{icon}</i>{label}</button>)}
-    </nav><div className="admin-user"><span>{user.name.slice(0, 1)}</span><div><b>{user.name}</b><small>超级管理员</small></div><button onClick={onLogout}>退出</button></div></aside>
+    </nav><div className="admin-user"><span>{user.name.slice(0, 1)}</span><div><b>{user.name}</b><small>超级管理员</small></div><div className="admin-account-actions"><button onClick={onChangePassword}>安全</button><button onClick={onLogout}>退出</button></div></div></aside>
     <main className="admin-main"><header className="admin-header"><div><h1>{tab === 'dashboard' ? '经营数据看板' : tab === 'orders' ? '订单管理' : tab === 'technicians' ? '技师管理' : '用户管理'}</h1><p>{isDemoData ? '离线面试演示数据' : '数据来自当前业务数据库'} · {new Date().toLocaleDateString('zh-CN')}</p></div><button className="admin-refresh" disabled={loading} onClick={() => void load()}>{loading ? '同步中…' : '↻ 刷新数据'}</button></header>
       {loading && !dashboard ? <div className="admin-loading"><i/><b>正在加载经营数据</b></div> : null}
       {tab === 'dashboard' && dashboard && <>

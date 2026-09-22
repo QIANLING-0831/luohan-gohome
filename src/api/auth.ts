@@ -17,5 +17,6 @@ export const authClient = {
     return session.user
   },
   me: () => request<SessionUser>('/api/auth/me'),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ changed: boolean }>('/api/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
   logout: clearApiSession,
 }

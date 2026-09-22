@@ -45,6 +45,18 @@ exports.main = async (event) => {
       c.assert(user && user.role === identity.role, 401, '账号不存在')
       return c.success({ id: user.id, phone: user.phone, name: user.name, role: user.role })
     }
+    if (path === '/api/auth/password' && method === 'PUT') {
+      const identity = c.actor(event)
+      const input = c.body(event)
+      const user = await c.first('User', 'id', identity.sub)
+      c.assert(user, 404, '账号不存在')
+      c.assert(!['13800138000', '13900139000', '13700137000'].includes(user.phone), 403, '公共演示账号为保证面试访问，不允许修改密码')
+      c.assert(typeof input.currentPassword === 'string' && c.passwordMatches(input.currentPassword, user.passwordHash), 400, '当前密码不正确')
+      c.assert(typeof input.newPassword === 'string' && input.newPassword.length >= 6 && input.newPassword.length <= 64, 400, '新密码需要 6–64 位')
+      c.assert(input.currentPassword !== input.newPassword, 400, '新密码不能与当前密码相同')
+      c.result(await c.db.from('User').update({ passwordHash: c.passwordHash(input.newPassword), updatedAt: new Date().toISOString() }).eq('id', identity.sub))
+      return c.success({ changed: true })
+    }
     if (path === '/api/profile' && method === 'GET') {
       const identity = c.actor(event, 'USER')
       const user = await c.first('User', 'id', identity.sub)

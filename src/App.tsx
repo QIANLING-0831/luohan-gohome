@@ -24,6 +24,7 @@ import { profileClient } from './api/profile'
 import type { UserProfile } from './api/profile'
 import { AdminConsole } from './components/AdminConsole'
 import { TechnicianWorkbench } from './components/TechnicianWorkbench'
+import { ChangePasswordDialog } from './components/ChangePasswordDialog'
 
 interface BookingDraft { dateLabel: string; dateKey: string; time: string; intensity: string; address: Address; note: string }
 interface Settlement { discount: number; paidAmount: number; couponLabel: string }
@@ -43,6 +44,7 @@ export function App() {
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot>({ dateIndex: 0, dateLabel: '今天', time: '19:00' })
   const [draft, setDraft] = useState<BookingDraft>({ dateLabel: '今天', dateKey: '', time: '19:00', intensity: '适中', address: defaultAddress, note: '' })
   const [toast, setToast] = useState('')
+  const [passwordOpen, setPasswordOpen] = useState(false)
   const toastTimer = useRef<number | null>(null)
   const technician = technicians.find((item) => item.id === selectedTechId) ?? technicians[0]
   const orderTechnician = order ? technicians.find((item) => item.id === order.techId) : undefined
@@ -172,7 +174,7 @@ export function App() {
     setOrder(null); setUserOrders([]); setProfile(null)
     setSessionUser(user); setAuthenticated(true); notify('注册成功，欢迎使用罗汉到家')
   }
-  const logout = () => { authClient.logout(); setAuthenticated(false); setSessionUser(null); setOrder(null); setUserOrders([]); setProfile(null); navigate('home') }
+  const logout = () => { authClient.logout(); setAuthenticated(false); setSessionUser(null); setOrder(null); setUserOrders([]); setProfile(null); setPasswordOpen(false); navigate('home') }
   const toggleFavorite = async (tech: Technician) => {
     if (!profile) return notify('收藏尚未加载，请稍后重试')
     try {
@@ -191,11 +193,12 @@ export function App() {
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
     if (screen === 'orders') return <OrdersScreen order={order} orders={userOrders} technicians={technicians} services={availableServices} technician={orderTechnician} service={orderService} onSelect={setOrder} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onNotify={notify}/>
     if (screen === 'messages' && sessionUser) return <MessagesScreen user={sessionUser} orders={userOrders} technicians={technicians} services={availableServices} onOpenOrder={(next) => { setOrder(next); navigate('orders') }} onNotify={notify}/>
-    if (screen === 'profile' && sessionUser) return <ProfileScreen key={sessionUser.id} user={sessionUser} profile={profile} orders={userOrders} technicians={technicians} services={availableServices} onProfileChange={setProfile} onNotify={notify} onRebook={rebook} onLogout={logout}/>
+    if (screen === 'profile' && sessionUser) return <ProfileScreen key={sessionUser.id} user={sessionUser} profile={profile} orders={userOrders} technicians={technicians} services={availableServices} onProfileChange={setProfile} onNotify={notify} onRebook={rebook} onLogout={logout} onChangePassword={() => setPasswordOpen(true)}/>
     return <HomeScreen technicians={technicians} favorites={profile?.favoriteIds ?? []} onToggleFavorite={(tech) => void toggleFavorite(tech)} onOpen={openTechnician} onNavigate={navigate}/>
   }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, availableServices, sessionUser, profile, userOrders, updateOrder, cancelOrder])
 
-  if (authenticated && sessionUser?.role === 'ADMIN') return <><AdminConsole user={sessionUser} onLogout={logout} onNotify={notify}/><div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
-  if (authenticated && sessionUser?.role === 'TECHNICIAN') return <><TechnicianWorkbench user={sessionUser} onLogout={logout} onNotify={notify}/><div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
-  return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={login} onRegister={register}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main></>
+  const passwordDialog = <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} onChanged={() => notify('密码修改成功，下次请使用新密码登录')}/>
+  if (authenticated && sessionUser?.role === 'ADMIN') return <><AdminConsole user={sessionUser} onLogout={logout} onChangePassword={() => setPasswordOpen(true)} onNotify={notify}/>{passwordDialog}<div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
+  if (authenticated && sessionUser?.role === 'TECHNICIAN') return <><TechnicianWorkbench user={sessionUser} onLogout={logout} onChangePassword={() => setPasswordOpen(true)} onNotify={notify}/>{passwordDialog}<div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>
+  return <><DesktopShowcase/><main className="app">{!authenticated ? <LoginScreen onNotify={notify} onLogin={login} onRegister={register}/> : <>{content}{showNav && <BottomNav screen={screen} onNavigate={navigate}/>}</>}<div className={`toast ${toast ? 'show' : ''}`}>{toast}</div></main>{authenticated && passwordDialog}</>
 }

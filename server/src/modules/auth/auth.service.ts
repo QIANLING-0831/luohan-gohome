@@ -26,3 +26,13 @@ export async function register(name: string, phone: string, password: string) {
   await database.user.create({ data: { name, phone, passwordHash: await hashPassword(password), role: 'USER', points: 0, preferences: '[]' } })
   return login(phone, 'password', password)
 }
+
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const user = await database.user.findUnique({ where: { id: userId } })
+  if (!user) throw new AppError(404, '账号不存在')
+  if (demoPhones.has(user.phone)) throw new AppError(403, '公共演示账号为保证面试访问，不允许修改密码')
+  if (!user.passwordHash || !await verifyPassword(currentPassword, user.passwordHash)) throw new AppError(400, '当前密码不正确')
+  if (currentPassword === newPassword) throw new AppError(400, '新密码不能与当前密码相同')
+  await database.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } })
+  return { changed: true }
+}

@@ -7,7 +7,7 @@ import { ApiUnavailableError } from '../api/client'
 const statusName = ['待接单','已接单','已出发','已到达','服务中','已完成']
 const demoOverview: TechnicianOverview = { technician: { id: 1, name: '陈静', title: '金牌理疗师', active: true, rating: 4.98 }, metrics: { todayOrders: 2, pendingOrders: 1, completedOrders: 862, income: 12680 }, orders: [{ id: 'LHDEMO1001', status: 'PENDING', statusIndex: 0, customer: '罗女士', phone: '138****8000', service: '肩颈深度放松', amount: 209, schedule: '明天 19:00', address: '静安嘉里中心 · 2号楼', detail: '上海市静安区南京西路1515号', intensity: '适中', note: '肩颈重点放松' }] }
 
-export function TechnicianWorkbench({ user, onLogout, onNotify }: { user: SessionUser; onLogout: () => void; onNotify: (message: string) => void }) {
+export function TechnicianWorkbench({ user, onLogout, onChangePassword, onNotify }: { user: SessionUser; onLogout: () => void; onChangePassword: () => void; onNotify: (message: string) => void }) {
   const [data, setData] = useState<TechnicianOverview | null>(null)
   const [busyId, setBusyId] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -32,7 +32,7 @@ export function TechnicianWorkbench({ user, onLogout, onNotify }: { user: Sessio
     finally { setBusyId('') }
   }
   if (!data) return <div className="workbench-loading"><i/><b>正在进入技师工作台</b></div>
-  return <div className="workbench-shell"><header className="workbench-head"><div><small>罗汉到家 · 技师工作台</small><h1>{data.technician.name}，今天辛苦了</h1><p><i className={data.technician.active ? 'online-dot' : ''}/>{data.technician.active ? '当前在线接单' : '当前暂停接单'} · ★ {data.technician.rating}</p></div><button onClick={onLogout}>退出工作台</button></header>
+  return <div className="workbench-shell"><header className="workbench-head"><div><small>罗汉到家 · 技师工作台</small><h1>{data.technician.name}，今天辛苦了</h1><p><i className={data.technician.active ? 'online-dot' : ''}/>{data.technician.active ? '当前在线接单' : '当前暂停接单'} · ★ {data.technician.rating}</p></div><div className="workspace-account-actions"><button onClick={onChangePassword}>修改密码</button><button onClick={onLogout}>退出工作台</button></div></header>
     <section className="workbench-metrics"><div><small>今日预约</small><b>{data.metrics.todayOrders}</b><i>单</i></div><div><small>等待接单</small><b>{data.metrics.pendingOrders}</b><i>单</i></div><div><small>累计完成</small><b>{data.metrics.completedOrders}</b><i>单</i></div><div><small>服务收入</small><b>¥{data.metrics.income}</b></div></section>
     <div className="workbench-title"><span><h2>我的服务订单</h2><p>订单状态会实时同步给用户和管理后台</p></span><button onClick={() => { setFeedback('订单列表已刷新'); void load() }}>↻ 刷新</button></div>
     {feedback && <div className="work-feedback" role="status"><i>✓</i><span>{feedback}</span><button aria-label="关闭操作提示" onClick={() => setFeedback('')}>×</button></div>}

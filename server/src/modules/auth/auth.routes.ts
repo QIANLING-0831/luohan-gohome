@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate } from '../../middleware/authentication.js'
 import { database } from '../../shared/database.js'
-import { login, register } from './auth.service.js'
+import { changePassword, login, register } from './auth.service.js'
 
 export const authRouter = Router()
 
@@ -22,5 +22,12 @@ authRouter.get('/me', authenticate, async (req, res, next) => {
   try {
     const user = await database.user.findUniqueOrThrow({ where: { id: req.auth!.sub } })
     res.json({ data: { id: user.id, phone: user.phone, name: user.name, role: user.role } })
+  } catch (error) { next(error) }
+})
+
+authRouter.put('/password', authenticate, async (req, res, next) => {
+  try {
+    const input = z.object({ currentPassword: z.string().min(6).max(64), newPassword: z.string().min(6).max(64) }).parse(req.body)
+    res.json({ data: await changePassword(req.auth!.sub, input.currentPassword, input.newPassword) })
   } catch (error) { next(error) }
 })
