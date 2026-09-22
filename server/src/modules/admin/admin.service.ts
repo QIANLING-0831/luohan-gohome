@@ -1,6 +1,7 @@
 import { database } from '../../shared/database.js'
 import { statusIndex } from '../../shared/order-status.js'
 import { AppError } from '../../shared/errors.js'
+import { hashPassword } from '../../shared/password.js'
 
 function orderSummary(order: Awaited<ReturnType<typeof fetchOrders>>[number]) {
   return {
@@ -72,17 +73,18 @@ export async function listAdminUsers() {
 export async function listAdminTechnicians() {
   return database.technician.findMany({
     orderBy: { id: 'asc' },
-    include: { services: { include: { service: true } }, _count: { select: { orders: true } } },
+    include: { user: true, services: { include: { service: true } }, _count: { select: { orders: true } } },
   }).then((items) => items.map((item) => ({
     id: item.id, name: item.name, title: item.title, rating: item.rating, active: item.active, archived: Boolean(item.archivedAt), imageKey: item.imageKey,
     orderCount: item._count.orders, price: item.price, experienceYears: item.experienceYears,
     onTimeRate: item.arrivalTotal ? Math.round(item.onTimeArrivals / item.arrivalTotal * 100) : 100,
     workStart: item.workStart, workEnd: item.workEnd, workDays: JSON.parse(item.workDays) as number[],
     services: item.services.map((entry) => entry.service.name),
+    loginPhone: item.user?.phone,
   })))
 }
 
-export interface CreateTechnicianInput { name: string; title: string; price: number; experienceYears: number; imageKey: string; intro: string; serviceIds: string[]; workStart: string; workEnd: string; workDays: number[] }
+export interface CreateTechnicianInput { name: string; phone: string; password: string; title: string; price: number; experienceYears: number; imageKey: string; intro: string; serviceIds: string[]; workStart: string; workEnd: string; workDays: number[] }
 
 export async function listAdminServices() {
   const rows = await database.service.findMany({ include: { _count: { select: { technicians: true } } }, orderBy: { name: 'asc' } })
@@ -104,14 +106,17 @@ export async function setServiceActive(id: string, active: boolean) {
 
 export async function createTechnician(actorId: string, input: CreateTechnicianInput) {
   const serviceIds = [...new Set(input.serviceIds)]
+  if (await database.user.findUnique({ where: { phone: input.phone } })) throw new AppError(409, '该手机号已被其他账号使用')
   const availableServices = await database.service.count({ where: { id: { in: serviceIds }, active: true } })
   if (availableServices !== serviceIds.length) throw new AppError(400, '包含不存在或已下架的服务项目')
   const created = await database.$transaction(async (tx) => {
+    const user = await tx.user.create({ data: { name: input.name, phone: input.phone, passwordHash: await hashPassword(input.password), role: 'TECHNICIAN', points: 0, preferences: '[]' } })
     const technician = await tx.technician.create({ data: {
       name: input.name, title: input.title, price: input.price, experienceYears: input.experienceYears, imageKey: input.imageKey,
       intro: input.intro, rating: 5, orderCount: 0, active: true,
       workStart: input.workStart, workEnd: input.workEnd, workDays: JSON.stringify([...new Set(input.workDays)].sort()),
       latitude: 31.2304, longitude: 121.4737,
+      userId: user.id,
       services: { create: serviceIds.map((serviceId) => ({ serviceId })) },
     } })
     await tx.auditLog.create({ data: { actorId, action: 'TECHNICIAN_CREATED', targetType: 'Technician', targetId: String(technician.id) } })

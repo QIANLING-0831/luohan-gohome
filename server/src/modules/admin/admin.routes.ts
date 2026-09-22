@@ -33,7 +33,7 @@ adminRouter.patch('/services/:id', async (req, res, next) => {
 adminRouter.post('/technicians', async (req, res, next) => {
   try {
     const input = z.object({
-      name: z.string().trim().min(2).max(20), title: z.string().trim().min(2).max(30),
+      name: z.string().trim().min(2).max(20), phone: z.string().regex(/^1\d{10}$/), password: z.string().min(6).max(64), title: z.string().trim().min(2).max(30),
       price: z.number().int().min(99).max(1999), experienceYears: z.number().int().min(0).max(60), imageKey: z.string().refine((value) => value.startsWith('data:image/') && validPortrait(value), '新增技师必须上传 100 KB 内的头像照片'),
       intro: z.string().trim().min(2).max(300), serviceIds: z.array(z.string()).min(1), workStart: z.string().regex(/^\d{2}:\d{2}$/), workEnd: z.string().regex(/^\d{2}:\d{2}$/), workDays: z.array(z.number().int().min(0).max(6)).min(1),
     }).refine((value) => value.workStart < value.workEnd, { message: '接单结束时间必须晚于开始时间' }).parse(req.body)

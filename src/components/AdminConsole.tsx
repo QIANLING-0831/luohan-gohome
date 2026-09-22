@@ -52,6 +52,8 @@ export function AdminConsole({ user, onLogout, onNotify }: { user: SessionUser; 
   const [editing, setEditing] = useState<ManagedTechnician | null>(null)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [newTitle, setNewTitle] = useState('')
   const [newPrice, setNewPrice] = useState(239)
   const [newExperienceYears, setNewExperienceYears] = useState(1)
@@ -168,6 +170,8 @@ export function AdminConsole({ user, onLogout, onNotify }: { user: SessionUser; 
   }
   const addTechnician = async () => {
     if (newName.trim().length < 2) return onNotify('技师姓名至少需要 2 个字符')
+    if (!/^1\d{10}$/.test(newPhone)) return onNotify('请输入有效的 11 位技师登录手机号')
+    if (newPassword.length < 6) return onNotify('技师初始密码至少需要 6 位')
     if (newTitle.trim().length < 2) return onNotify('展示职称至少需要 2 个字符')
     if (newIntro.trim().length < 2) return onNotify('个人简介至少需要 2 个字符')
     if (newPrice < 99 || newPrice > 1999) return onNotify('服务起步价应在 99–1999 元之间')
@@ -179,8 +183,8 @@ export function AdminConsole({ user, onLogout, onNotify }: { user: SessionUser; 
     if (avatarBusy) return onNotify('头像正在处理，请稍候')
     setSaving(true)
     try {
-      const created = await adminClient.createTechnician({ name: newName.trim(), title: newTitle.trim(), price: newPrice, experienceYears: newExperienceYears, imageKey: newImageKey, intro: newIntro.trim(), serviceIds: newServices, workStart: newWorkStart, workEnd: newWorkEnd, workDays: newWorkDays })
-      setTechnicians((current) => [...current, created]); setAdding(false); setNewName(''); setNewTitle(''); setNewIntro(''); setNewImageKey(''); onNotify(`${created.name}已加入技师列表`)
+      const created = await adminClient.createTechnician({ name: newName.trim(), phone: newPhone, password: newPassword, title: newTitle.trim(), price: newPrice, experienceYears: newExperienceYears, imageKey: newImageKey, intro: newIntro.trim(), serviceIds: newServices, workStart: newWorkStart, workEnd: newWorkEnd, workDays: newWorkDays })
+      setTechnicians((current) => [...current, created]); setAdding(false); setNewName(''); setNewPhone(''); setNewPassword(''); setNewTitle(''); setNewIntro(''); setNewImageKey(''); onNotify(`${created.name}已创建，技师账号可立即登录`)
       await load()
     } catch (error) { onNotify(error instanceof ApiUnavailableError ? '真实后端尚未连接，无法新增技师' : error instanceof Error ? error.message : '新增失败') }
     finally { setSaving(false) }
@@ -228,6 +232,8 @@ export function AdminConsole({ user, onLogout, onNotify }: { user: SessionUser; 
       <div className="admin-form-grid">
       <label className="admin-form-field"><span>姓名</span><input value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={20} placeholder="例如：李安"/></label>
       <label className="admin-form-field"><span>展示职称</span><input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} maxLength={30} placeholder="例如：资深推拿师"/></label>
+      <label className="admin-form-field"><span>登录手机号</span><input aria-label="技师登录手机号" value={newPhone} onChange={(event) => setNewPhone(event.target.value.replace(/\D/g, '').slice(0, 11))} inputMode="tel" placeholder="作为技师工作台账号"/></label>
+      <label className="admin-form-field"><span>初始密码</span><input aria-label="技师初始密码" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} maxLength={64} placeholder="至少 6 位"/><small>创建后，技师使用手机号和该密码登录自己的工作台</small></label>
       <label className="admin-form-field"><span>服务起步价</span><div><i>¥</i><input type="number" min="99" max="1999" value={newPrice} onChange={(event) => setNewPrice(Number(event.target.value))}/></div></label>
       <label className="admin-form-field"><span>从业经验（年）</span><input type="number" min="0" max="60" value={newExperienceYears} onChange={(event) => setNewExperienceYears(Number(event.target.value))}/><small>由管理员根据资质资料填写；准时率由订单到达记录自动计算</small></label>
       </div>

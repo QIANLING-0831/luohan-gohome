@@ -79,6 +79,19 @@ export function App() {
   }, [authenticated, setAuthenticated, setSessionUser])
 
   useEffect(() => {
+    if (!authenticated || sessionUser?.role !== 'USER' || !hasApiSession() || !['orders', 'messages'].includes(screen)) return
+    let cancelled = false
+    const refreshOrders = () => orderClient.list().then((next) => {
+      if (cancelled) return
+      setUserOrders(next)
+      setOrder((current) => next.find((item) => item.id === current?.id) ?? next[0] ?? null)
+    }).catch(() => { /* Keep the last successful snapshot and retry later. */ })
+    void refreshOrders()
+    const timer = window.setInterval(refreshOrders, 20000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [authenticated, sessionUser?.id, sessionUser?.role, screen])
+
+  useEffect(() => {
     const timer = setInterval(() => setTechnicians((current) => current.map((tech) => ({ ...tech, lat: tech.lat + (Math.random() - .5) * .00035, lng: tech.lng + (Math.random() - .5) * .00035 }))), 2200)
     return () => clearInterval(timer)
   }, [])
@@ -122,11 +135,14 @@ export function App() {
   }, [order, setOrder])
   const cancelOrder = useCallback(() => {
     const current = order
-    setOrder(null)
-    setUserOrders((items) => items.filter((item) => item.id !== current?.id))
+    if (!current) return
+    const cancelled = { ...current, status: 6 }
+    setOrder(cancelled)
+    setUserOrders((items) => items.map((item) => item.id === current.id ? cancelled : item))
     notify('订单已取消，退款将原路退回')
-    if (current && hasApiSession()) orderClient.cancel(current.id).catch((error) => {
+    if (hasApiSession()) orderClient.cancel(current.id).catch((error) => {
       setOrder(current)
+      setUserOrders((items) => items.map((item) => item.id === current.id ? current : item))
       notify(error instanceof Error ? error.message : '取消订单失败')
     })
   }, [order, setOrder])
@@ -173,8 +189,8 @@ export function App() {
     if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} initialDateIndex={selectedSlot.dateIndex} initialTime={selectedSlot.time} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
     if (screen === 'payment') return <PaymentScreen technician={technician} service={selectedService} schedule={`${draft.dateLabel} ${draft.time}`} onBack={() => navigate('booking')} onPaid={pay}/>
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
-    if (screen === 'orders') return <OrdersScreen order={order} technician={orderTechnician} service={orderService} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onNotify={notify}/>
-    if (screen === 'messages') return <MessagesScreen onNotify={notify}/>
+    if (screen === 'orders') return <OrdersScreen order={order} orders={userOrders} technicians={technicians} services={availableServices} technician={orderTechnician} service={orderService} onSelect={setOrder} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onNotify={notify}/>
+    if (screen === 'messages' && sessionUser) return <MessagesScreen user={sessionUser} orders={userOrders} technicians={technicians} services={availableServices} onOpenOrder={(next) => { setOrder(next); navigate('orders') }} onNotify={notify}/>
     if (screen === 'profile' && sessionUser) return <ProfileScreen key={sessionUser.id} user={sessionUser} profile={profile} orders={userOrders} technicians={technicians} services={availableServices} onProfileChange={setProfile} onNotify={notify} onRebook={rebook} onLogout={logout}/>
     return <HomeScreen technicians={technicians} favorites={profile?.favoriteIds ?? []} onToggleFavorite={(tech) => void toggleFavorite(tech)} onOpen={openTechnician} onNavigate={navigate}/>
   }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, availableServices, sessionUser, profile, userOrders, updateOrder, cancelOrder])

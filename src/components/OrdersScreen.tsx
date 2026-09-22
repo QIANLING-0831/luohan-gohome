@@ -1,15 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Order, Service, Technician } from "../types";
 import { orderStatuses } from "../data";
 import { OrderTrackingMap, trackedDistance } from "./OrderTrackingMap";
 
 interface Props {
   order: Order | null;
+  orders: Order[];
+  technicians: Technician[];
+  services: Service[];
   technician?: Technician;
   service?: Service;
   onHome: () => void;
   onUpdate: (order: Order) => void;
   onCancel: () => void;
+  onSelect: (order: Order) => void;
   onNotify: (message: string) => void;
 }
 interface ChatMessage {
@@ -20,11 +24,15 @@ type Panel = "chat" | "cancel" | "review" | null;
 
 export function OrdersScreen({
   order,
+  orders,
+  technicians,
+  services,
   technician,
   service,
   onHome,
   onUpdate,
   onCancel,
+  onSelect,
   onNotify,
 }: Props) {
   const [panel, setPanel] = useState<Panel>(null);
@@ -35,6 +43,8 @@ export function OrdersScreen({
   const [rating, setRating] = useState(5);
   const [reviewTags, setReviewTags] = useState<string[]>(["手法专业"]);
   const [reviewText, setReviewText] = useState("");
+  const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
+  const visibleOrders = useMemo(() => orders.filter((item) => filter === "ALL" || filter === "ACTIVE" && item.status < 5 || filter === "COMPLETED" && item.status === 5), [orders, filter]);
 
   useEffect(() => {
     if (
@@ -52,7 +62,7 @@ export function OrdersScreen({
     return () => clearInterval(timer);
   }, [order, onUpdate]);
 
-  if (!order || !technician || !service)
+  if (!orders.length || !order || !technician || !service)
     return (
       <section className="screen active">
         <header>
@@ -79,6 +89,7 @@ export function OrdersScreen({
           ? "进行中"
           : "已结束";
   const advance = () => {
+    if (order.status === 6) return onNotify('该订单已取消，无法继续推进');
     if (order.status === 5) {
       if (order.reviewed)
         return onNotify(`本次服务已评价 ${order.reviewRating} 星`);
@@ -126,8 +137,18 @@ export function OrdersScreen({
           ☏
         </button>
       </header>
+      <div className="user-order-overview">
+        <div className="user-order-filters">
+          {([['ALL', '全部'], ['ACTIVE', '进行中'], ['COMPLETED', '已完成']] as const).map(([value, label]) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{label}<small>{value === 'ALL' ? orders.length : value === 'ACTIVE' ? orders.filter((item) => item.status < 5).length : orders.filter((item) => item.status === 5).length}</small></button>)}
+        </div>
+        <div className="user-order-list">{visibleOrders.map((item) => {
+          const itemTechnician = technicians.find((candidate) => candidate.id === item.techId)
+          const itemService = services.find((candidate) => candidate.id === item.serviceId)
+          return <button key={item.id} className={`user-order-item ${item.id === order.id ? 'active' : ''}`} aria-pressed={item.id === order.id} onClick={() => onSelect(item)}><span className="user-order-avatar">{itemTechnician?.img ? <img src={itemTechnician.img} alt=""/> : itemTechnician?.name.slice(0, 1)}</span><span><b>{itemService?.name ?? '服务项目'}</b><small>{itemTechnician?.name ?? '服务技师'} · {item.dateLabel} {item.time}</small></span><span><i>{orderStatuses[item.status]}</i><strong>¥{item.paidAmount ?? item.originalPrice ?? itemService?.price ?? 0}</strong></span></button>
+        })}</div>
+      </div>
       <div className="section-head">
-        <h2>服务进度</h2>
+        <h2>订单详情</h2>
         <span>
           <i className="live-dot" />
           实时同步
@@ -207,7 +228,7 @@ export function OrdersScreen({
             <strong>8 6 1 9</strong>
           </div>
           <div className="timeline">
-            {orderStatuses.map((item, index) => (
+            {orderStatuses.slice(0, 6).map((item, index) => (
               <div
                 key={item}
                 className={`step ${index < order.status ? "done" : index === order.status ? "current" : ""}`}
@@ -237,7 +258,9 @@ export function OrdersScreen({
               在线联系
             </button>
             <button className="primary" onClick={advance}>
-              {order.status === 5
+              {order.status === 6
+                ? "订单已取消"
+                : order.status === 5
                 ? order.reviewed
                   ? `已评价 ${order.reviewRating}★`
                   : "评价本次服务"

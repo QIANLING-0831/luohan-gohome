@@ -3,7 +3,7 @@ const c = require('./core')
 
 async function handle(event, path, method) {
   const identity = c.actor(event, 'USER')
-  if (path === '/api/orders' && method === 'GET') { const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); return rows.filter(o => o.status !== 'CANCELLED').sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(c.presentOrder) }
+  if (path === '/api/orders' && method === 'GET') { const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); return rows.sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(c.presentOrder) }
   if (path === '/api/orders' && method === 'POST') {
     const input = c.body(event)
     const [technician, service] = await Promise.all([c.first('Technician', 'id', Number(input.technicianId)), c.first('Service', 'id', input.serviceId)])

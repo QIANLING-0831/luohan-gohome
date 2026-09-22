@@ -17,7 +17,7 @@ export const services: Service[] = [
   { id: 'tuina', name: '中式经络推拿', desc: '90分钟 · 全身经络疏解', price: 369 },
 ]
 
-export const orderStatuses = ['待接单', '已接单', '已出发', '已到达', '服务中', '已完成']
+export const orderStatuses = ['待接单', '已接单', '已出发', '已到达', '服务中', '已完成', '已取消']
 
 export function distanceKm(tech: Pick<Technician, 'lat' | 'lng'>) {
   const x = (tech.lng - center.lng) * 91.2

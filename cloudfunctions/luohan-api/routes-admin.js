@@ -2,7 +2,7 @@ const c = require('./core')
 
 async function snapshot() { const [orders, users, technicians, services, links] = await Promise.all(['Order', 'User', 'Technician', 'Service', 'TechnicianService'].map(c.all)); return { orders, users, technicians, services, links } }
 function orderSummary(o, s) { const user = s.users.find(u => u.id === o.userId); const tech = s.technicians.find(t => t.id === o.technicianId); const service = s.services.find(v => v.id === o.serviceId); return { id: o.id, status: o.status, statusIndex: c.statuses.indexOf(o.status), customer: user?.name || '未知用户', phone: c.mask(user?.phone || ''), technician: tech?.name || '已归档技师', service: service?.name || '服务项目', amount: o.paidAmount, schedule: `${o.dateLabel} ${c.beijingSlot(o.appointmentAt).split('|')[1]}`, address: o.addressLabel, createdAt: c.iso(o.createdAt) } }
-function managedTech(t, s) { return { id: t.id, name: t.name, title: t.title, rating: t.rating, active: t.active, archived: Boolean(t.archivedAt), imageKey: t.imageKey, orderCount: s.orders.filter(o => o.technicianId === t.id).length, price: t.price, experienceYears: t.experienceYears, onTimeRate: t.arrivalTotal ? Math.round(t.onTimeArrivals / t.arrivalTotal * 100) : 100, workStart: t.workStart, workEnd: t.workEnd, workDays: JSON.parse(t.workDays || '[]'), services: s.links.filter(link => link.technicianId === t.id).map(link => s.services.find(service => service.id === link.serviceId)?.name).filter(Boolean) } }
+function managedTech(t, s) { return { id: t.id, name: t.name, title: t.title, rating: t.rating, active: t.active, archived: Boolean(t.archivedAt), imageKey: t.imageKey, orderCount: s.orders.filter(o => o.technicianId === t.id).length, price: t.price, experienceYears: t.experienceYears, onTimeRate: t.arrivalTotal ? Math.round(t.onTimeArrivals / t.arrivalTotal * 100) : 100, workStart: t.workStart, workEnd: t.workEnd, workDays: JSON.parse(t.workDays || '[]'), services: s.links.filter(link => link.technicianId === t.id).map(link => s.services.find(service => service.id === link.serviceId)?.name).filter(Boolean), loginPhone: s.users.find(user => user.id === t.userId)?.phone } }
 function validateSchedule(input) { c.assert(/^\d{2}:\d{2}$/.test(input.workStart || '') && /^\d{2}:\d{2}$/.test(input.workEnd || '') && input.workStart < input.workEnd, 400, '接单结束时间必须晚于开始时间'); c.assert(Array.isArray(input.workDays) && input.workDays.length > 0 && input.workDays.every(day => Number.isInteger(day) && day >= 0 && day <= 6), 400, '请至少选择一个接单日') }
 function validateServices(ids, s) { c.assert(Array.isArray(ids) && ids.length > 0 && ids.every(id => s.services.some(v => v.id === id && v.active)), 400, '请选择有效的服务项目') }
 function validateImage(value) { c.assert(typeof value === 'string' && (['default', 'chen', 'zhou', 'lin'].includes(value) || /^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && Buffer.byteLength(value.split(',')[1], 'base64') <= 100 * 1024), 400, '头像格式无效或超过 100 KB') }
@@ -25,11 +25,19 @@ async function handle(event, path, method) {
   if (path === '/api/admin/technicians' && method === 'POST') {
     const input = c.body(event)
     c.assert(typeof input.name === 'string' && input.name.trim().length >= 2 && typeof input.title === 'string' && input.title.trim().length >= 2 && typeof input.intro === 'string' && input.intro.trim().length >= 2 && Number.isFinite(input.price) && input.price > 0 && Number.isInteger(input.experienceYears) && input.experienceYears >= 0 && input.experienceYears <= 60, 400, '请填写有效的姓名、职称、简介、价格和从业经验')
+    c.assert(typeof input.phone === 'string' && /^1\d{10}$/.test(input.phone), 400, '请输入有效的 11 位技师登录手机号')
+    c.assert(typeof input.password === 'string' && input.password.length >= 6 && input.password.length <= 64, 400, '技师初始密码需要 6–64 位')
+    c.assert(!s.users.some(user => user.phone === input.phone), 409, '该手机号已被其他账号使用')
     c.assert(typeof input.imageKey === 'string' && input.imageKey.startsWith('data:image/'), 400, '新增技师必须上传头像照片')
     validateImage(input.imageKey)
     validateServices(input.serviceIds, s)
     validateSchedule(input)
-    const created = c.result(await c.db.from('Technician').insert({ name: input.name.trim(), title: input.title.trim(), rating: 5, orderCount: 0, latitude: 31.2304, longitude: 121.4737, price: input.price, imageKey: input.imageKey, intro: input.intro || '', active: true, experienceYears: input.experienceYears, arrivalTotal: 0, onTimeArrivals: 0, workStart: input.workStart, workEnd: input.workEnd, workDays: JSON.stringify([...new Set(input.workDays)].sort()) }).select('*'))[0]
+    const userId = `tech-user-${Date.now().toString(36)}-${require('node:crypto').randomBytes(3).toString('hex')}`
+    const now = new Date().toISOString()
+    c.result(await c.db.from('User').insert({ id: userId, phone: input.phone, name: input.name.trim(), role: 'TECHNICIAN', points: 0, preferences: '[]', passwordHash: c.passwordHash(input.password), createdAt: now, updatedAt: now }))
+    let created
+    try { created = c.result(await c.db.from('Technician').insert({ name: input.name.trim(), title: input.title.trim(), rating: 5, orderCount: 0, latitude: 31.2304, longitude: 121.4737, price: input.price, imageKey: input.imageKey, intro: input.intro || '', active: true, experienceYears: input.experienceYears, arrivalTotal: 0, onTimeArrivals: 0, workStart: input.workStart, workEnd: input.workEnd, workDays: JSON.stringify([...new Set(input.workDays)].sort()), userId }).select('*'))[0] }
+    catch (error) { await c.db.from('User').delete().eq('id', userId); throw error }
     c.assert(created, 500, '创建技师失败')
     for (const serviceId of [...new Set(input.serviceIds)]) c.result(await c.db.from('TechnicianService').insert({ technicianId: created.id, serviceId }))
     return managedTech(created, await snapshot())

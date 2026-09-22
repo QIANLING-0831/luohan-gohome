@@ -5,7 +5,7 @@ export interface ManagedOrder {
   service: string; amount: number; schedule: string; address: string; createdAt: string
 }
 export interface ManagedTechnician {
-  id: number; name: string; title: string; rating: number; active: boolean; archived: boolean; imageKey: string; orderCount: number; price: number; experienceYears: number; onTimeRate: number; workStart: string; workEnd: string; workDays: number[]; services: string[]
+  id: number; name: string; title: string; rating: number; active: boolean; archived: boolean; imageKey: string; orderCount: number; price: number; experienceYears: number; onTimeRate: number; workStart: string; workEnd: string; workDays: number[]; services: string[]; loginPhone?: string
 }
 export interface ManagedService { id: string; name: string; description: string; price: number; duration: number; active: boolean; technicianCount: number }
 export interface ManagedUser {
@@ -29,7 +29,7 @@ export const adminClient = {
   setServiceActive: (id: string, active: boolean) => request<{ id: string; active: boolean }>(`/api/admin/services/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
   setTechnicianActive: (id: number, active: boolean) => request<{ id: number; active: boolean }>(`/api/admin/technicians/${id}/status`, { method: 'PATCH', body: JSON.stringify({ active }) }),
   updateTechnician: (id: number, input: { title: string; price: number; experienceYears: number; imageKey?: string; serviceIds: string[]; workStart: string; workEnd: string; workDays: number[] }) => request<ManagedTechnician>(`/api/admin/technicians/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
-  createTechnician: (input: { name: string; title: string; price: number; experienceYears: number; imageKey: string; intro: string; serviceIds: string[]; workStart: string; workEnd: string; workDays: number[] }) => request<ManagedTechnician>('/api/admin/technicians', { method: 'POST', body: JSON.stringify(input) }),
+  createTechnician: (input: { name: string; phone: string; password: string; title: string; price: number; experienceYears: number; imageKey: string; intro: string; serviceIds: string[]; workStart: string; workEnd: string; workDays: number[] }) => request<ManagedTechnician>('/api/admin/technicians', { method: 'POST', body: JSON.stringify(input) }),
   archiveTechnician: (id: number) => request<{ id: number; archived: boolean }>(`/api/admin/technicians/${id}`, { method: 'DELETE' }),
   restoreTechnician: (id: number) => request<{ id: number; archived: boolean; active: boolean }>(`/api/admin/technicians/${id}/restore`, { method: 'PATCH' }),
 }
