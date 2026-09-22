@@ -148,6 +148,12 @@ export function App() {
       notify(error instanceof Error ? error.message : '取消订单失败')
     })
   }, [order, setOrder])
+  const reviewOrder = useCallback(async (current: Order, rating: number) => {
+    try {
+      const updated = await orderClient.review(current.id, rating)
+      setOrder(updated); setUserOrders((items) => items.map((item) => item.id === updated.id ? updated : item))
+    } catch (error) { notify(error instanceof Error ? error.message : '评价提交失败'); throw error }
+  }, [notify])
   const login = async (phone: string, method: LoginMethod, credential: string) => {
     try {
       const user = await authClient.login(phone, method, credential)
@@ -188,14 +194,14 @@ export function App() {
 
   const content = useMemo(() => {
     if (screen === 'detail') return <TechnicianDetail technician={technician} services={technicianServices} selected={selectedService} selectedSlot={selectedSlot} onSelect={setSelectedService} onSlotSelect={(slot) => { setSelectedSlot(slot); notify(`已选择 ${slot.dateLabel} ${slot.time}`) }} onBack={() => navigate('home')} onBook={() => navigate('booking')}/>
-    if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} initialDateIndex={selectedSlot.dateIndex} initialTime={selectedSlot.time} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
+    if (screen === 'booking') return <BookingScreen technician={technician} service={selectedService} addresses={profile?.addresses ?? []} initialDateIndex={selectedSlot.dateIndex} initialTime={selectedSlot.time} onBack={() => navigate('detail')} onContinue={(next) => { setDraft(next); navigate('payment') }}/>
     if (screen === 'payment') return <PaymentScreen technician={technician} service={selectedService} schedule={`${draft.dateLabel} ${draft.time}`} onBack={() => navigate('booking')} onPaid={pay}/>
     if (screen === 'success' && order) return <SuccessScreen order={order} technician={technician} onTrack={() => navigate('orders')} onHome={() => navigate('home')}/>
-    if (screen === 'orders') return <OrdersScreen order={order} orders={userOrders} technicians={technicians} services={availableServices} technician={orderTechnician} service={orderService} onSelect={setOrder} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onNotify={notify}/>
+    if (screen === 'orders') return <OrdersScreen order={order} orders={userOrders} technicians={technicians} services={availableServices} technician={orderTechnician} service={orderService} onSelect={setOrder} onHome={() => navigate('home')} onUpdate={updateOrder} onCancel={cancelOrder} onReview={reviewOrder} onNotify={notify}/>
     if (screen === 'messages' && sessionUser) return <MessagesScreen user={sessionUser} orders={userOrders} technicians={technicians} services={availableServices} onOpenOrder={(next) => { setOrder(next); navigate('orders') }} onNotify={notify}/>
     if (screen === 'profile' && sessionUser) return <ProfileScreen key={sessionUser.id} user={sessionUser} profile={profile} orders={userOrders} technicians={technicians} services={availableServices} onProfileChange={setProfile} onNotify={notify} onRebook={rebook} onLogout={logout} onChangePassword={() => setPasswordOpen(true)}/>
     return <HomeScreen technicians={technicians} favorites={profile?.favoriteIds ?? []} onToggleFavorite={(tech) => void toggleFavorite(tech)} onOpen={openTechnician} onNavigate={navigate}/>
-  }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, availableServices, sessionUser, profile, userOrders, updateOrder, cancelOrder])
+  }, [screen, technician, technicianServices, selectedService, selectedSlot, draft, order, orderTechnician, orderService, technicians, availableServices, sessionUser, profile, userOrders, updateOrder, cancelOrder, reviewOrder])
 
   const passwordDialog = <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} onChanged={() => notify('密码修改成功，下次请使用新密码登录')}/>
   if (authenticated && sessionUser?.role === 'ADMIN') return <><AdminConsole user={sessionUser} onLogout={logout} onChangePassword={() => setPasswordOpen(true)} onNotify={notify}/>{passwordDialog}<div className={`toast global-toast ${toast ? 'show' : ''}`}>{toast}</div></>

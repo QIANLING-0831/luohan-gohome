@@ -42,11 +42,12 @@ async function handle(event, path, method) {
     for (const serviceId of [...new Set(input.serviceIds)]) c.result(await c.db.from('TechnicianService').insert({ technicianId: created.id, serviceId }))
     return managedTech(created, await snapshot())
   }
-  const match = path.match(/^\/api\/admin\/technicians\/(\d+)(?:\/(status|restore))?$/)
+  const match = path.match(/^\/api\/admin\/technicians\/(\d+)(?:\/(status|restore|reset-password))?$/)
   if (match) {
     const id = Number(match[1]); const current = s.technicians.find(t => t.id === id)
     c.assert(current, 404, '技师不存在')
     if (method === 'PATCH' && match[2] === 'restore') { c.assert(current.archivedAt, 409, '该技师当前未归档'); c.result(await c.db.from('Technician').update({ active: false, archivedAt: null }).eq('id', id)); return { id, archived: false, active: false } }
+    if (method === 'POST' && match[2] === 'reset-password') { const input = c.body(event); c.assert(typeof input.password === 'string' && input.password.length >= 6 && input.password.length <= 64, 400, '新密码需要 6–64 位'); const account = s.users.find(user => user.id === current.userId); c.assert(account, 409, '该技师尚未绑定登录账号'); c.assert(account.phone !== '13900139000', 403, '公共演示技师账号不允许重置密码'); c.result(await c.db.from('User').update({ passwordHash: c.passwordHash(input.password), updatedAt: new Date().toISOString() }).eq('id', account.id)); return { id, reset: true } }
     c.assert(!current.archivedAt, 409, '该技师已归档，请先恢复')
     if (method === 'DELETE' && !match[2]) { c.assert(!s.orders.some(o => o.technicianId === id && !['COMPLETED', 'CANCELLED'].includes(o.status)), 409, '该技师还有进行中的订单，请先完成或取消订单'); c.result(await c.db.from('Technician').update({ active: false, archivedAt: new Date().toISOString() }).eq('id', id)); return { id, archived: true } }
     if (method === 'PATCH' && match[2] === 'status') { const { active } = c.body(event); c.assert(typeof active === 'boolean', 400, '状态无效'); c.result(await c.db.from('Technician').update({ active }).eq('id', id)); return { id, active } }

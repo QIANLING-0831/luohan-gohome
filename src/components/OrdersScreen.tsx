@@ -13,6 +13,7 @@ interface Props {
   onHome: () => void;
   onUpdate: (order: Order) => void;
   onCancel: () => void;
+  onReview: (order: Order, rating: number) => Promise<void>;
   onSelect: (order: Order) => void;
   onNotify: (message: string) => void;
 }
@@ -32,6 +33,7 @@ export function OrdersScreen({
   onHome,
   onUpdate,
   onCancel,
+  onReview,
   onSelect,
   onNotify,
 }: Props) {
@@ -43,6 +45,7 @@ export function OrdersScreen({
   const [rating, setRating] = useState(5);
   const [reviewTags, setReviewTags] = useState<string[]>(["手法专业"]);
   const [reviewText, setReviewText] = useState("");
+  const [reviewing, setReviewing] = useState(false);
   const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
   const visibleOrders = useMemo(() => orders.filter((item) => filter === "ALL" || filter === "ACTIVE" && item.status < 5 || filter === "COMPLETED" && item.status === 5), [orders, filter]);
 
@@ -118,10 +121,10 @@ export function OrdersScreen({
         ? current.filter((item) => item !== tag)
         : [...current, tag],
     );
-  const submitReview = () => {
-    onUpdate({ ...order, reviewed: true, reviewRating: rating });
-    setPanel(null);
-    onNotify(`评价提交成功，感谢你的 ${rating} 星好评`);
+  const submitReview = async () => {
+    setReviewing(true);
+    try { await onReview(order, rating); setPanel(null); onNotify(`评价已保存，技师评分已重新计算`); }
+    finally { setReviewing(false); }
   };
 
   return (
@@ -366,8 +369,8 @@ export function OrdersScreen({
                 onChange={(event) => setReviewText(event.target.value)}
                 placeholder="分享本次服务体验（选填）"
               />
-              <button className="primary review-submit" onClick={submitReview}>
-                提交 {rating} 星评价
+              <button className="primary review-submit" disabled={reviewing} onClick={() => void submitReview()}>
+                {reviewing ? "提交中…" : `提交 ${rating} 星评价`}
               </button>
             </>
           )}

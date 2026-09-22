@@ -147,6 +147,14 @@ export async function restoreTechnician(actorId: string, technicianId: number) {
   return { id: technicianId, archived: false, active: false }
 }
 
+export async function resetTechnicianPassword(technicianId: number, password: string) {
+  const technician = await database.technician.findUnique({ where: { id: technicianId }, include: { user: true } })
+  if (!technician?.user) throw new AppError(409, '该技师尚未绑定登录账号')
+  if (technician.user.phone === '13900139000') throw new AppError(403, '公共演示技师账号不允许重置密码')
+  await database.user.update({ where: { id: technician.user.id }, data: { passwordHash: await hashPassword(password) } })
+  return { id: technicianId, reset: true }
+}
+
 export async function setTechnicianActive(actorId: string, technicianId: number, active: boolean) {
   const technician = await database.$transaction(async (tx) => {
     const updated = await tx.technician.update({ where: { id: technicianId, archivedAt: null }, data: { active } })

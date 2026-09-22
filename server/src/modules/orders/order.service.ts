@@ -87,3 +87,17 @@ export async function cancelOrder(userId: string, orderId: string) {
     database.orderStatusLog.create({ data: { orderId: order.id, status: 'CANCELLED' } }),
   ])
 }
+
+export async function reviewOrder(userId: string, orderId: string, rating: number) {
+  const order = await database.order.findFirst({ where: { id: orderId, userId } })
+  if (!order) throw new AppError(404, '订单不存在')
+  if (order.status !== 'COMPLETED') throw new AppError(409, '服务完成后才能评价')
+  if (order.reviewed) throw new AppError(409, '该订单已经评价')
+  const updated = await database.$transaction(async (tx) => {
+    const result = await tx.order.update({ where: { id: order.id }, data: { reviewed: true, reviewRating: rating } })
+    const aggregate = await tx.order.aggregate({ where: { technicianId: order.technicianId, reviewed: true }, _avg: { reviewRating: true } })
+    await tx.technician.update({ where: { id: order.technicianId }, data: { rating: Math.round((aggregate._avg.reviewRating ?? 5) * 100) / 100 } })
+    return result
+  })
+  return presentOrder(updated)
+}

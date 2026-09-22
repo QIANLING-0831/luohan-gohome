@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate } from '../../middleware/authentication.js'
 import { authorize } from '../../middleware/authorization.js'
-import { archiveTechnician, createService, createTechnician, getDashboard, listAdminOrders, listAdminServices, listAdminTechnicians, listAdminUsers, restoreTechnician, setServiceActive, setTechnicianActive, updateTechnicianProfile } from './admin.service.js'
+import { archiveTechnician, createService, createTechnician, getDashboard, listAdminOrders, listAdminServices, listAdminTechnicians, listAdminUsers, resetTechnicianPassword, restoreTechnician, setServiceActive, setTechnicianActive, updateTechnicianProfile } from './admin.service.js'
 
 export const adminRouter = Router()
 adminRouter.use(authenticate, authorize('ADMIN'))
@@ -45,6 +45,10 @@ adminRouter.delete('/technicians/:id', async (req, res, next) => {
 })
 adminRouter.patch('/technicians/:id/restore', async (req, res, next) => {
   try { res.json({ data: await restoreTechnician(req.auth!.sub, Number(req.params.id)) }) } catch (error) { next(error) }
+})
+adminRouter.post('/technicians/:id/reset-password', async (req, res, next) => {
+  try { const { password } = z.object({ password: z.string().min(6).max(64) }).parse(req.body); res.json({ data: await resetTechnicianPassword(Number(req.params.id), password) }) }
+  catch (error) { next(error) }
 })
 adminRouter.patch('/technicians/:id/status', authorize('ADMIN'), async (req, res, next) => {
   try {

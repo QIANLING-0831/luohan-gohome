@@ -4,6 +4,11 @@ const admin = require('./routes-admin')
 const orders = require('./routes-orders')
 const technician = require('./routes-technician')
 
+function accountData(user) {
+  try { const parsed = JSON.parse(user.preferences || '[]'); return Array.isArray(parsed) ? { preferences: parsed, addresses: [] } : { preferences: Array.isArray(parsed.preferences) ? parsed.preferences : [], addresses: Array.isArray(parsed.addresses) ? parsed.addresses : [] } }
+  catch { return { preferences: [], addresses: [] } }
+}
+
 exports.main = async (event) => {
   try {
     const method = event.httpMethod || 'GET'
@@ -65,14 +70,25 @@ exports.main = async (event) => {
         c.db.from('PointRecord').select('*').eq('userId', identity.sub),
         c.db.from('Favorite').select('*').eq('userId', identity.sub),
       ])
-      return c.success({ name: user.name, phone: user.phone, points: user.points, preferences: JSON.parse(user.preferences || '[]'), favoriteIds: c.result(favorites).map(item => item.technicianId), pointRecords: c.result(records).sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).slice(0, 20) })
+      const data = accountData(user)
+      return c.success({ name: user.name, phone: user.phone, points: user.points, preferences: data.preferences, addresses: data.addresses, favoriteIds: c.result(favorites).map(item => item.technicianId), pointRecords: c.result(records).sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).slice(0, 20) })
     }
     if (path === '/api/profile/preferences' && method === 'PUT') {
       const identity = c.actor(event, 'USER')
       const input = c.body(event)
       c.assert(Array.isArray(input.preferences) && input.preferences.length <= 10 && input.preferences.every(value => typeof value === 'string' && value.length <= 30), 400, '按摩偏好无效')
-      c.result(await c.db.from('User').update({ preferences: JSON.stringify(input.preferences), updatedAt: new Date().toISOString() }).eq('id', identity.sub))
+      const user = await c.first('User', 'id', identity.sub); const data = accountData(user)
+      c.result(await c.db.from('User').update({ preferences: JSON.stringify({ ...data, preferences: input.preferences }), updatedAt: new Date().toISOString() }).eq('id', identity.sub))
       return c.success({ preferences: input.preferences })
+    }
+    if (path === '/api/profile/addresses' && method === 'PUT') {
+      const identity = c.actor(event, 'USER'); const input = c.body(event)
+      c.assert(Array.isArray(input.addresses) && input.addresses.length <= 5 && input.addresses.every(item => typeof item.id === 'string' && item.id.length <= 40 && typeof item.label === 'string' && item.label.trim().length >= 2 && item.label.length <= 40 && typeof item.detail === 'string' && item.detail.trim().length >= 5 && item.detail.length <= 120), 400, '地址信息无效，最多保存 5 个地址')
+      const ids = input.addresses.map(item => item.id); c.assert(new Set(ids).size === ids.length, 400, '地址编号重复')
+      const addresses = input.addresses.map((item, index) => ({ id: item.id, label: item.label.trim(), detail: item.detail.trim(), isDefault: Boolean(item.isDefault) || !input.addresses.some(value => value.isDefault) && index === 0 })).map((item, index, all) => ({ ...item, isDefault: item.isDefault && all.findIndex(value => value.isDefault) === index }))
+      const user = await c.first('User', 'id', identity.sub); const data = accountData(user)
+      c.result(await c.db.from('User').update({ preferences: JSON.stringify({ ...data, addresses }), updatedAt: new Date().toISOString() }).eq('id', identity.sub))
+      return c.success({ addresses })
     }
     if (path.startsWith('/api/profile/favorites/') && method === 'PUT') {
       const identity = c.actor(event, 'USER')

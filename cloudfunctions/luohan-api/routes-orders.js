@@ -33,6 +33,18 @@ async function handle(event, path, method) {
     c.result(await c.db.from('OrderStatusLog').insert({ orderId: id, status: 'PENDING' }))
     return c.presentOrder(row)
   }
+  const reviewMatch = path.match(/^\/api\/orders\/([^/]+)\/review$/)
+  if (reviewMatch && method === 'POST') {
+    const input = c.body(event); const rating = Number(input.rating)
+    c.assert(Number.isInteger(rating) && rating >= 1 && rating <= 5, 400, '请选择 1–5 星评分')
+    const order = await c.first('Order', 'id', reviewMatch[1]); c.assert(order && order.userId === identity.sub, 404, '订单不存在')
+    c.assert(order.status === 'COMPLETED', 409, '服务完成后才能评价'); c.assert(!order.reviewed, 409, '该订单已经评价')
+    const updated = c.result(await c.db.from('Order').update({ reviewed: true, reviewRating: rating, updatedAt: new Date().toISOString() }).eq('id', order.id).select('*'))[0]
+    const reviewed = c.result(await c.db.from('Order').select('reviewRating').eq('technicianId', order.technicianId).eq('reviewed', true))
+    const average = reviewed.length ? Math.round(reviewed.reduce((sum, item) => sum + Number(item.reviewRating || 0), 0) / reviewed.length * 100) / 100 : 5
+    c.result(await c.db.from('Technician').update({ rating: average }).eq('id', order.technicianId))
+    return c.presentOrder(updated)
+  }
   const match = path.match(/^\/api\/orders\/([^/]+)\/(advance|cancel)$/)
   if (match && method === 'POST') {
     const order = await c.first('Order', 'id', match[1]); c.assert(order && order.userId === identity.sub, 404, '订单不存在')

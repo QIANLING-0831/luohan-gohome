@@ -31,6 +31,7 @@ export interface Address {
   id: string
   label: string
   detail: string
+  isDefault?: boolean
 }
 
 export interface Order {

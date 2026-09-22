@@ -20,4 +20,5 @@ export const orderClient = {
   create: (input: CreateOrderInput) => request<Order>('/api/orders', { method: 'POST', body: JSON.stringify(input) }),
   advance: (id: string) => request<Order>(`/api/orders/${id}/advance`, { method: 'POST' }),
   cancel: (id: string) => request<void>(`/api/orders/${id}/cancel`, { method: 'POST' }),
+  review: (id: string, rating: number) => request<Order>(`/api/orders/${id}/review`, { method: 'POST', body: JSON.stringify({ rating }) }),
 }
