@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Service, Technician } from "../types";
 import { availabilityClient } from "../api/availability";
+import { reviewClient, type ReviewSummary } from "../api/reviews";
 import {
   bookingDates,
   bookingTimes,
@@ -46,6 +47,9 @@ export function TechnicianDetail({
     workDays: tech.workDays,
   });
   const [availabilityError, setAvailabilityError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [reviews, setReviews] = useState<ReviewSummary | null>(null);
+  const [reviewError, setReviewError] = useState(false);
   useEffect(() => {
     setAvailabilityError(false);
     availabilityClient
@@ -55,7 +59,11 @@ export function TechnicianDetail({
         setAvailabilityError(false);
       })
       .catch(() => setAvailabilityError(true));
-  }, [tech.id]);
+  }, [tech.id, reloadKey]);
+  useEffect(() => {
+    setReviews(null); setReviewError(false);
+    reviewClient.forTechnician(tech.id).then(setReviews).catch(() => setReviewError(true));
+  }, [tech.id, reloadKey]);
   const slots = availabilityError
     ? []
     : dates
@@ -155,7 +163,7 @@ export function TechnicianDetail({
               </button>
             );
           })}
-          {!slots.length && <p className="slot-empty">{availabilityError ? "档期暂时无法加载，请稍后重试" : "未来三天暂无可约时间"}</p>}
+          {!slots.length && <p className="slot-empty">{availabilityError ? <>档期暂时无法加载 <button className="inline-retry" onClick={() => setReloadKey((value) => value + 1)}>重试</button></> : "未来三天暂无可约时间"}</p>}
         </div>
         {chosen && (
           <p className="slot-feedback" aria-live="polite">
@@ -182,13 +190,15 @@ export function TechnicianDetail({
           ))}
         </div>
         <h2 className="sub-title">真实评价</h2>
-        <div className="review-card">
-          <span className="stars">★★★★★</span>
-          <p>
-            肩颈放松很到位，力度沟通也很细致。技师提前到达，用品都是当面拆封的。
-          </p>
-          <small>匿名用户 · 3天前</small>
-        </div>
+        {!reviews && !reviewError && <div className="review-card review-skeleton"><i/><i/><i/></div>}
+        {reviewError && <div className="review-card empty-review"><p>评价暂时加载失败</p><button className="inline-retry" onClick={() => setReloadKey((value) => value + 1)}>重新加载</button></div>}
+        {reviews?.items.slice(0, 3).map((review) => <div className="review-card" key={review.id}>
+          <span className="stars">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+          {review.tags.length > 0 && <div className="review-tags">{review.tags.map((tag) => <i key={tag}>{tag}</i>)}</div>}
+          <p>{review.text || '用户对本次服务表示满意。'}</p>
+          <small>{review.customer} · {new Date(review.createdAt).toLocaleDateString('zh-CN')}</small>
+        </div>)}
+        {reviews && !reviews.items.length && <div className="review-card empty-review"><p>暂无评价，完成服务后即可留下第一条真实反馈。</p></div>}
         <div className="sticky-cta">
           <button className="primary" disabled={!chosen} onClick={onBook}>
             {chosen

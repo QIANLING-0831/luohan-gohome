@@ -1,9 +1,11 @@
 const c = require('./core')
+const growth = require('./growth')
 
 async function handle(event, path, method) {
   const identity = await c.authenticatedActor(event, 'TECHNICIAN')
   const profile = await c.first('Technician', 'userId', identity.sub)
   c.assert(profile && !profile.archivedAt, 404, '当前账号没有关联技师档案')
+  await growth.expirePendingOrders()
   if (path === '/api/technician-workbench/overview' && method === 'GET') {
     const [allOrders, users, services] = await Promise.all(['Order', 'User', 'Service'].map(c.all))
     const orders = allOrders.filter(o => o.technicianId === profile.id && o.status !== 'CANCELLED').sort((a, b) => c.iso(a.appointmentAt).localeCompare(c.iso(b.appointmentAt)))

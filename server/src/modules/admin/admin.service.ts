@@ -23,7 +23,7 @@ function fetchOrders() {
   return database.order.findMany({ include: { user: true, technician: true, service: true }, orderBy: { createdAt: 'desc' } })
 }
 
-export async function getDashboard() {
+export async function getDashboard(days = 30) {
   const [orders, activeTechnicians, userCount] = await Promise.all([
     fetchOrders(),
     database.technician.count({ where: { active: true } }),
@@ -40,9 +40,18 @@ export async function getDashboard() {
     const [, month, day] = key.split('-')
     return { label: `${Number(month)}/${Number(day)}`, count: orders.filter((item) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(item.createdAt) === key).length }
   })
+  const rangeStart = days > 0 ? Date.now() - days * 86400000 : 0
+  const ranged = orders.filter((order) => order.createdAt.getTime() >= rangeStart)
+  const rangeCompleted = ranged.filter((order) => order.status === 'COMPLETED')
+  const rangeRevenue = rangeCompleted.reduce((sum, order) => sum + order.paidAmount, 0)
+  const completedByUser = new Map<string, number>()
+  rangeCompleted.forEach((order) => completedByUser.set(order.userId, (completedByUser.get(order.userId) ?? 0) + 1))
+  const technicianRanking = [...new Map(rangeCompleted.map((order) => [order.technicianId, order.technician.name])).entries()].map(([id, name]) => { const own = rangeCompleted.filter((order) => order.technicianId === id); return { id, name, orders: own.length, revenue: own.reduce((sum, order) => sum + order.paidAmount, 0) } }).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+  const serviceSales = [...new Map(rangeCompleted.map((order) => [order.serviceId, order.service.name])).entries()].map(([id, name]) => { const own = rangeCompleted.filter((order) => order.serviceId === id); return { id, name, orders: own.length, revenue: own.reduce((sum, order) => sum + order.paidAmount, 0) } }).sort((a, b) => b.orders - a.orders).slice(0, 5)
   return {
     metrics: { totalOrders: orders.length, pendingOrders: orders.filter((item) => item.status === 'PENDING').length, revenue, activeTechnicians, userCount },
     statusCounts, trend, recentOrders: orders.slice(0, 8).map(orderSummary),
+    analytics: { days, averageOrderValue: rangeCompleted.length ? Math.round(rangeRevenue / rangeCompleted.length) : 0, repeatRate: completedByUser.size ? Math.round([...completedByUser.values()].filter((count) => count >= 2).length / completedByUser.size * 100) : 0, completionRate: ranged.length ? Math.round(rangeCompleted.length / ranged.length * 100) : 0, funnel: [{ label: '创建订单', count: ranged.length }, { label: '技师接单', count: ranged.filter((order) => !['PENDING', 'CANCELLED'].includes(order.status)).length }, { label: '完成服务', count: rangeCompleted.length }], technicianRanking, serviceSales },
   }
 }
 

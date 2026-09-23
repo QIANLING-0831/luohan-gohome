@@ -47,6 +47,7 @@ export function App() {
   const [toast, setToast] = useState('')
   const [passwordOpen, setPasswordOpen] = useState(false)
   const toastTimer = useRef<number | null>(null)
+  const paymentRequestId = useRef(crypto.randomUUID())
   const technician = technicians.find((item) => item.id === selectedTechId) ?? technicians[0]
   const orderTechnician = order ? technicians.find((item) => item.id === order.techId) : undefined
   const orderService = order ? availableServices.find((item) => item.id === order.serviceId) : undefined
@@ -110,6 +111,12 @@ export function App() {
   }, [])
   useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current) }, [])
   useEffect(() => {
+    if (!['booking', 'payment'].includes(screen)) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [screen])
+  useEffect(() => {
     const expire = () => { setAuthenticated(false); setSessionUser(null); setOrder(null); setUserOrders([]); setProfile(null); setPasswordOpen(false); setScreen('home'); notify('登录状态已失效，请重新登录') }
     window.addEventListener(SESSION_EXPIRED_EVENT, expire)
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expire)
@@ -125,7 +132,7 @@ export function App() {
     let nextOrder = localOrder
     if (hasApiSession()) {
       try {
-        nextOrder = await orderClient.create({ technicianId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, ...settlement })
+        nextOrder = await orderClient.create({ technicianId: technician.id, serviceId: selectedService.id, ...draft, paymentMethod, ...settlement, requestId: paymentRequestId.current })
       } catch (error) {
         if (!(error instanceof ApiUnavailableError)) {
           notify(error instanceof Error ? error.message : '下单失败，请稍后重试')
@@ -135,7 +142,8 @@ export function App() {
         notify('后端暂时离线，本次订单保存在当前设备')
       }
     }
-    setOrder(nextOrder); setUserOrders((current) => [nextOrder, ...current]); navigate('success'); notify('支付成功，预约已提交')
+    paymentRequestId.current = crypto.randomUUID()
+    setOrder(nextOrder); setUserOrders((current) => current.some((item) => item.id === nextOrder.id) ? current : [nextOrder, ...current]); navigate('success'); notify('支付成功，预约已提交')
   }
   const updateOrder = useCallback((next: Order) => {
     setOrder(next)
@@ -154,9 +162,9 @@ export function App() {
       notify(error instanceof Error ? error.message : '取消订单失败')
     })
   }, [order, setOrder])
-  const reviewOrder = useCallback(async (current: Order, rating: number) => {
+  const reviewOrder = useCallback(async (current: Order, rating: number, tags: string[], text: string) => {
     try {
-      const updated = await orderClient.review(current.id, rating)
+      const updated = await orderClient.review(current.id, { rating, tags, text })
       setOrder(updated); setUserOrders((items) => items.map((item) => item.id === updated.id ? updated : item))
     } catch (error) { notify(error instanceof Error ? error.message : '评价提交失败'); throw error }
   }, [notify])

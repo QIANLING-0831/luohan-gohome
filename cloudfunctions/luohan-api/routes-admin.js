@@ -1,5 +1,6 @@
 const c = require('./core')
 const crypto = require('node:crypto')
+const growth = require('./growth')
 
 async function snapshot() { const [orders, users, technicians, services, links] = await Promise.all(['Order', 'User', 'Technician', 'Service', 'TechnicianService'].map(c.all)); return { orders, users, technicians, services, links } }
 function orderSummary(o, s) { const user = s.users.find(u => u.id === o.userId); const tech = s.technicians.find(t => t.id === o.technicianId); const service = s.services.find(v => v.id === o.serviceId); return { id: o.id, status: o.status, statusIndex: c.statuses.indexOf(o.status), customer: user?.name || '未知用户', phone: c.mask(user?.phone || ''), technician: tech?.name || '已归档技师', service: service?.name || '服务项目', amount: o.paidAmount, schedule: `${o.dateLabel} ${c.beijingSlot(o.appointmentAt).split('|')[1]}`, address: o.addressLabel, createdAt: c.iso(o.createdAt) } }
@@ -9,12 +10,14 @@ function validateServices(ids, s) { c.assert(Array.isArray(ids) && ids.length > 
 function validateImage(value) { c.assert(typeof value === 'string' && (['default', 'chen', 'zhou', 'lin'].includes(value) || /^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && Buffer.byteLength(value.split(',')[1], 'base64') <= 100 * 1024), 400, '头像格式无效或超过 100 KB') }
 async function handle(event, path, method) {
   await c.authenticatedActor(event, 'ADMIN')
+  await growth.expirePendingOrders()
   const s = await snapshot()
   const sorted = s.orders.slice().sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt)))
   if (path === '/api/admin/dashboard' && method === 'GET') {
     const today = new Date()
     const trend = Array.from({ length: 7 }, (_, i) => { const date = new Date(today.getTime() - (6 - i) * 86400000); const day = c.beijingDateKey(date); const [, month, dateNumber] = day.split('-'); return { label: `${Number(month)}/${Number(dateNumber)}`, count: s.orders.filter(o => c.beijingDateKey(new Date(o.createdAt)) === day).length } })
-    return { metrics: { totalOrders: s.orders.length, pendingOrders: s.orders.filter(o => o.status === 'PENDING').length, revenue: s.orders.filter(o => o.status === 'COMPLETED').reduce((n, o) => n + o.paidAmount, 0), activeTechnicians: s.technicians.filter(t => t.active && !t.archivedAt).length, userCount: s.users.filter(u => u.role === 'USER').length }, statusCounts: [...c.statuses, 'CANCELLED'].map(status => ({ status, count: s.orders.filter(o => o.status === status).length })), trend, recentOrders: sorted.slice(0, 8).map(o => orderSummary(o, s)) }
+    const days = Math.max(0, Math.min(365, Number(event.queryStringParameters?.days || 30)))
+    return { metrics: { totalOrders: s.orders.length, pendingOrders: s.orders.filter(o => o.status === 'PENDING').length, revenue: s.orders.filter(o => o.status === 'COMPLETED').reduce((n, o) => n + o.paidAmount, 0), activeTechnicians: s.technicians.filter(t => t.active && !t.archivedAt).length, userCount: s.users.filter(u => u.role === 'USER').length }, statusCounts: [...c.statuses, 'CANCELLED'].map(status => ({ status, count: s.orders.filter(o => o.status === status).length })), trend, recentOrders: sorted.slice(0, 8).map(o => orderSummary(o, s)), analytics: growth.analytics(s, days) }
   }
   if (path === '/api/admin/orders' && method === 'GET') return sorted.map(o => orderSummary(o, s))
   if (path === '/api/admin/users' && method === 'GET') return s.users.filter(u => u.role === 'USER').map(u => { const own = sorted.filter(o => o.userId === u.id); const completed = own.filter(o => o.status === 'COMPLETED'); let preferences = []; try { preferences = JSON.parse(u.preferences || '[]') } catch {} return { id: u.id, name: u.name, phone: u.phone, points: u.points, preferences, orderCount: own.length, completedOrders: completed.length, totalSpent: completed.reduce((n, o) => n + o.paidAmount, 0), lastOrderAt: own[0] ? c.iso(own[0].createdAt) : null, createdAt: c.iso(u.createdAt) } })

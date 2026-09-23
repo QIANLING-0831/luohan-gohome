@@ -11,5 +11,7 @@ export function presentOrder(order: Order) {
     note: order.note, originalPrice: order.originalPrice, discount: order.discount,
     paidAmount: order.paidAmount, couponLabel: order.couponLabel,
     reviewed: order.reviewed, reviewRating: order.reviewRating ?? undefined,
+    createdAt: order.createdAt.toISOString(),
+    expiresAt: order.status === 'PENDING' ? new Date(order.createdAt.getTime() + 15 * 60 * 1000).toISOString() : undefined,
   }
 }

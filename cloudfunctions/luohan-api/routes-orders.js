@@ -1,9 +1,10 @@
 const crypto = require('node:crypto')
 const c = require('./core')
+const growth = require('./growth')
 
 async function handle(event, path, method) {
   const identity = await c.authenticatedActor(event, 'USER')
-  if (path === '/api/orders' && method === 'GET') { const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); return rows.sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(c.presentOrder) }
+  if (path === '/api/orders' && method === 'GET') { await growth.expirePendingOrders(); const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); return rows.sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(c.presentOrder) }
   if (path === '/api/orders' && method === 'POST') {
     const input = c.body(event)
     const [technician, service] = await Promise.all([c.first('Technician', 'id', Number(input.technicianId)), c.first('Service', 'id', input.serviceId)])
@@ -32,19 +33,26 @@ async function handle(event, path, method) {
     const couponLabel = Object.hasOwn(allowedCoupons, input.couponLabel) ? input.couponLabel : '不使用优惠券'
     const discount = Math.min(service.price, allowedCoupons[couponLabel])
     const now = new Date().toISOString()
-    const id = `LH${Date.now().toString().slice(-8)}${crypto.randomInt(10, 99)}`
+    const requestId = typeof input.requestId === 'string' && /^[A-Za-z0-9-]{8,80}$/.test(input.requestId) ? input.requestId : crypto.randomUUID()
+    const id = `LH${crypto.createHash('sha256').update(`${identity.sub}:${requestId}`).digest('hex').slice(0, 14).toUpperCase()}`
+    const existing = await c.first('Order', 'id', id)
+    if (existing) return c.presentOrder(existing)
     const row = c.result(await c.db.from('Order').insert({ id, userId: identity.sub, technicianId: technician.id, serviceId: service.id, status: 'PENDING', dateLabel: input.dateLabel || input.dateKey, appointmentAt: date.toISOString(), intensity: input.intensity || '适中', paymentMethod: input.paymentMethod || 'wechat', etaSeconds: 720, addressLabel: input.address.label, addressDetail: input.address.detail, note: input.note || '', originalPrice: service.price, discount, paidAmount: service.price - discount, couponLabel, reviewed: false, createdAt: now, updatedAt: now }).select('*'))[0]
     c.assert(row, 500, '下单失败')
+    const contenders = c.result(await c.db.from('Order').select('id,status,appointmentAt,serviceId,createdAt').eq('technicianId', technician.id)).filter(o => o.status !== 'CANCELLED' && o.id !== id).filter(o => { const existingStart = new Date(o.appointmentAt); const existingEnd = new Date(existingStart.getTime() + Number(durations.get(o.serviceId) || 0) * 60000); return existingStart < end && existingEnd > date })
+    if (contenders.some(other => `${c.iso(other.createdAt)}:${other.id}` < `${now}:${id}`)) { await c.db.from('Order').delete().eq('id', id); throw new c.HttpError(409, '该时段刚被预约，请选择其他时间', 'SLOT_UNAVAILABLE') }
     c.result(await c.db.from('OrderStatusLog').insert({ orderId: id, status: 'PENDING' }))
     return c.presentOrder(row)
   }
   const reviewMatch = path.match(/^\/api\/orders\/([^/]+)\/review$/)
   if (reviewMatch && method === 'POST') {
-    const input = c.body(event); const rating = Number(input.rating)
-    c.assert(Number.isInteger(rating) && rating >= 1 && rating <= 5, 400, '请选择 1–5 星评分')
+    const input = c.body(event); const { rating, tags, text } = growth.reviewInput(input)
     const order = await c.first('Order', 'id', reviewMatch[1]); c.assert(order && order.userId === identity.sub, 404, '订单不存在')
     c.assert(order.status === 'COMPLETED', 409, '服务完成后才能评价'); c.assert(!order.reviewed, 409, '该订单已经评价')
-    const updated = c.result(await c.db.from('Order').update({ reviewed: true, reviewRating: rating, updatedAt: new Date().toISOString() }).eq('id', order.id).select('*'))[0]
+    const updated = c.result(await c.db.from('Order').update({ reviewed: true, reviewRating: rating, updatedAt: new Date().toISOString() }).eq('id', order.id).eq('reviewed', false).select('*'))[0]
+    c.assert(updated, 409, '该订单已经评价')
+    try { c.result(await c.db.from('AuditLog').insert({ actorId: identity.sub, action: 'ORDER_REVIEW', targetType: 'Order', targetId: order.id, metadata: JSON.stringify({ rating, tags, text, technicianId: order.technicianId, serviceId: order.serviceId }) })) }
+    catch (error) { await c.db.from('Order').update({ reviewed: false, reviewRating: null }).eq('id', order.id); throw error }
     const reviewed = c.result(await c.db.from('Order').select('reviewRating').eq('technicianId', order.technicianId).eq('reviewed', true))
     const average = reviewed.length ? Math.round(reviewed.reduce((sum, item) => sum + Number(item.reviewRating || 0), 0) / reviewed.length * 100) / 100 : 5
     c.result(await c.db.from('Technician').update({ rating: average }).eq('id', order.technicianId))

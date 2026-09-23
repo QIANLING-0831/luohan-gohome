@@ -13,7 +13,7 @@ interface Props {
   onHome: () => void;
   onUpdate: (order: Order) => void;
   onCancel: () => void;
-  onReview: (order: Order, rating: number) => Promise<void>;
+  onReview: (order: Order, rating: number, tags: string[], text: string) => Promise<void>;
   onSelect: (order: Order) => void;
   onNotify: (message: string) => void;
 }
@@ -46,6 +46,7 @@ export function OrdersScreen({
   const [reviewTags, setReviewTags] = useState<string[]>(["手法专业"]);
   const [reviewText, setReviewText] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [, setClock] = useState(0);
   const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
   const visibleOrders = useMemo(() => orders.filter((item) => filter === "ALL" || filter === "ACTIVE" && item.status < 5 || filter === "COMPLETED" && item.status === 5), [orders, filter]);
 
@@ -64,6 +65,11 @@ export function OrdersScreen({
     );
     return () => clearInterval(timer);
   }, [order, onUpdate]);
+  useEffect(() => {
+    if (!order?.expiresAt || order.status !== 0) return;
+    const timer = window.setInterval(() => setClock((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [order?.expiresAt, order?.status]);
 
   if (!orders.length || !order || !technician || !service)
     return (
@@ -91,6 +97,7 @@ export function OrdersScreen({
         : order.status === 4
           ? "进行中"
           : "已结束";
+  const acceptSeconds = order.expiresAt ? Math.max(0, Math.ceil((new Date(order.expiresAt).getTime() - Date.now()) / 1000)) : null;
   const openReview = () => {
     if (order.reviewed) return onNotify(`本次服务已评价 ${order.reviewRating} 星`);
     setPanel("review");
@@ -117,7 +124,7 @@ export function OrdersScreen({
     );
   const submitReview = async () => {
     setReviewing(true);
-    try { await onReview(order, rating); setPanel(null); onNotify(`评价已保存，技师评分已重新计算`); }
+    try { await onReview(order, rating, reviewTags, reviewText.trim()); setPanel(null); onNotify(`评价已保存，技师评分已重新计算`); }
     finally { setReviewing(false); }
   };
 
@@ -179,6 +186,7 @@ export function OrdersScreen({
               </b>
             </span>
           </div>
+          {order.status === 0 && acceptSeconds !== null && <p className="accept-countdown" aria-live="polite">技师接单剩余 {String(Math.floor(acceptSeconds / 60)).padStart(2, '0')}:{String(acceptSeconds % 60).padStart(2, '0')}，超时将自动取消</p>}
           <div className="eta">
             <span>
               <small>{order.status < 4 ? "预计抵达" : "当前进度"}</small>

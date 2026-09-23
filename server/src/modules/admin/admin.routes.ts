@@ -7,8 +7,8 @@ import { archiveTechnician, bindTechnicianAccount, createService, createTechnici
 export const adminRouter = Router()
 adminRouter.use(authenticate, authorize('ADMIN'))
 
-adminRouter.get('/dashboard', async (_req, res, next) => {
-  try { res.json({ data: await getDashboard() }) } catch (error) { next(error) }
+adminRouter.get('/dashboard', async (req, res, next) => {
+  try { const days = Math.max(0, Math.min(365, Number(req.query.days ?? 30))); res.json({ data: await getDashboard(days) }) } catch (error) { next(error) }
 })
 adminRouter.get('/orders', async (_req, res, next) => {
   try { res.json({ data: await listAdminOrders() }) } catch (error) { next(error) }

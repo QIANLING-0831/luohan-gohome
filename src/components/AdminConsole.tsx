@@ -244,6 +244,7 @@ export function AdminConsole({
 }) {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null);
+  const [analyticsDays, setAnalyticsDays] = useState(30);
   const [orders, setOrders] = useState<ManagedOrder[]>([]);
   const [technicians, setTechnicians] = useState<ManagedTechnician[]>([]);
   const [managedServices, setManagedServices] =
@@ -316,7 +317,7 @@ export function AdminConsole({
         nextUsers,
         nextServices,
       ] = await Promise.all([
-        adminClient.dashboard(),
+        adminClient.dashboard(analyticsDays),
         adminClient.orders(),
         adminClient.technicians(),
         adminClient.users(),
@@ -342,7 +343,7 @@ export function AdminConsole({
     } finally {
       setLoading(false);
     }
-  }, [onNotify]);
+  }, [onNotify, analyticsDays]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -881,6 +882,19 @@ export function AdminConsole({
                 </div>
               </div>
             </section>
+            {dashboard.analytics && <section className="admin-analytics">
+              <div className="analytics-head"><span><b>经营分析</b><small>按真实完成订单计算</small></span><div>{[7, 30, 90].map((days) => <button key={days} className={analyticsDays === days ? 'active' : ''} onClick={() => setAnalyticsDays(days)}>{days}天</button>)}</div></div>
+              <div className="analytics-kpis">
+                <div><small>平均客单价</small><strong>¥{dashboard.analytics.averageOrderValue}</strong></div>
+                <div><small>复购用户占比</small><strong>{dashboard.analytics.repeatRate}%</strong></div>
+                <div><small>订单完成率</small><strong>{dashboard.analytics.completionRate}%</strong></div>
+              </div>
+              <div className="analytics-grid">
+                <div><h3>履约漏斗</h3>{dashboard.analytics.funnel.map((item, index) => <p key={item.label}><span>{item.label}</span><i style={{ width: `${Math.max(8, item.count / Math.max(1, dashboard.analytics!.funnel[0].count) * 100)}%` }}/><b>{item.count}</b>{index < dashboard.analytics!.funnel.length - 1 && <small>↓</small>}</p>)}</div>
+                <div><h3>技师业绩排行</h3>{dashboard.analytics.technicianRanking.length ? dashboard.analytics.technicianRanking.map((item, index) => <p key={item.id}><em>{index + 1}</em><span>{item.name}</span><b>{item.orders}单 · ¥{item.revenue}</b></p>) : <p className="analytics-empty">暂无已完成订单</p>}</div>
+                <div><h3>服务销量</h3>{dashboard.analytics.serviceSales.length ? dashboard.analytics.serviceSales.map((item) => <p key={item.id}><span>{item.name}</span><b>{item.orders}单 · ¥{item.revenue}</b></p>) : <p className="analytics-empty">暂无已完成订单</p>}</div>
+              </div>
+            </section>}
             <OrderTable
               orders={dashboard.recentOrders}
               compact

@@ -17,6 +17,7 @@ orderRouter.post('/', async (req, res, next) => {
       time: z.string().regex(/^\d{2}:\d{2}$/), intensity: z.string().min(1), paymentMethod: z.string().min(1),
       address: z.object({ label: z.string().min(1), detail: z.string().min(1) }), note: z.string().optional(),
       discount: z.number().int().nonnegative().optional(), couponLabel: z.string().optional(),
+      requestId: z.string().regex(/^[A-Za-z0-9-]{8,80}$/).optional(),
     }).parse(req.body)
     res.status(201).json({ data: await createOrder(req.auth!.sub, input) })
   } catch (error) { next(error) }
@@ -27,6 +28,6 @@ orderRouter.post('/:id/cancel', async (req, res, next) => {
 })
 
 orderRouter.post('/:id/review', async (req, res, next) => {
-  try { const { rating } = z.object({ rating: z.number().int().min(1).max(5) }).parse(req.body); res.json({ data: await reviewOrder(req.auth!.sub, req.params.id, rating) }) }
+  try { const { rating, tags, text } = z.object({ rating: z.number().int().min(1).max(5), tags: z.array(z.enum(['手法专业', '准时到达', '沟通细致', '环境整洁', '力度合适', '值得推荐'])).max(4).default([]), text: z.string().trim().max(300).default('') }).parse(req.body); res.json({ data: await reviewOrder(req.auth!.sub, req.params.id, rating, tags, text) }) }
   catch (error) { next(error) }
 })

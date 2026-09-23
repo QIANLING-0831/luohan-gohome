@@ -2,6 +2,7 @@ import { database } from '../../shared/database.js'
 import { AppError } from '../../shared/errors.js'
 import { nextOrderStatus } from '../../shared/order-status.js'
 import { presentOrder } from './order.presenter.js'
+import { createHash, randomUUID } from 'node:crypto'
 
 export interface CreateOrderInput {
   technicianId: number
@@ -15,6 +16,7 @@ export interface CreateOrderInput {
   note?: string
   discount?: number
   couponLabel?: string
+  requestId?: string
 }
 
 function appointmentDate(dateKey: string, time: string) { return new Date(`${dateKey}T${time}:00+08:00`) }
@@ -40,24 +42,31 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   const end = new Date(scheduledAt.getTime() + service.duration * 60000)
   const workEnd = appointmentDate(input.dateKey, technician.workEnd)
   if (end > workEnd) throw new AppError(409, '该服务将在技师下班后结束，请选择更早时间')
-  const existingOrders = await database.order.findMany({ where: { technicianId: technician.id, status: { not: 'CANCELLED' } }, include: { service: true } })
-  const conflict = existingOrders.some((existing) => { const existingEnd = new Date(existing.appointmentAt.getTime() + existing.service.duration * 60000); return existing.appointmentAt < end && existingEnd > scheduledAt })
-  if (conflict) throw new AppError(409, '该时段与已有预约重叠，请选择其他时间', 'SLOT_UNAVAILABLE')
   const allowedCoupons: Record<string, number> = { '新客立减券': service.price >= 199 ? 30 : 0, '金卡会员券': 20, '不使用优惠券': 0 }
   const couponLabel = input.couponLabel && Object.hasOwn(allowedCoupons, input.couponLabel) ? input.couponLabel : '不使用优惠券'
   const discount = Math.min(service.price, allowedCoupons[couponLabel])
-  const orderId = `LH${Date.now().toString().slice(-8)}`
-  const order = await database.$transaction((tx) => tx.order.create({ data: {
-    id: orderId, userId, technicianId: technician.id, serviceId: service.id,
-    dateLabel: input.dateLabel, appointmentAt: scheduledAt, intensity: input.intensity,
-    paymentMethod: input.paymentMethod, addressLabel: input.address.label, addressDetail: input.address.detail,
-    note: input.note ?? '', originalPrice: service.price, discount, paidAmount: service.price - discount,
-    couponLabel, statusLogs: { create: { status: 'PENDING' } },
-  } }))
+  const orderId = `LH${createHash('sha256').update(`${userId}:${input.requestId || randomUUID()}`).digest('hex').slice(0, 14).toUpperCase()}`
+  const duplicate = await database.order.findUnique({ where: { id: orderId } })
+  if (duplicate) return presentOrder(duplicate)
+  const order = await database.$transaction(async (tx) => {
+    const existingOrders = await tx.order.findMany({ where: { technicianId: technician.id, status: { not: 'CANCELLED' } }, include: { service: true } })
+    const conflict = existingOrders.some((existing) => { const existingEnd = new Date(existing.appointmentAt.getTime() + existing.service.duration * 60000); return existing.appointmentAt < end && existingEnd > scheduledAt })
+    if (conflict) throw new AppError(409, '该时段与已有预约重叠，请选择其他时间', 'SLOT_UNAVAILABLE')
+    return tx.order.create({ data: {
+      id: orderId, userId, technicianId: technician.id, serviceId: service.id,
+      dateLabel: input.dateLabel, appointmentAt: scheduledAt, intensity: input.intensity,
+      paymentMethod: input.paymentMethod, addressLabel: input.address.label, addressDetail: input.address.detail,
+      note: input.note ?? '', originalPrice: service.price, discount, paidAmount: service.price - discount,
+      couponLabel, statusLogs: { create: { status: 'PENDING' } },
+    } })
+  })
   return presentOrder(order)
 }
 
 export async function listOrders(userId: string) {
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000)
+  const expired = await database.order.findMany({ where: { userId, status: 'PENDING', createdAt: { lte: cutoff } }, select: { id: true } })
+  if (expired.length) await database.$transaction(expired.flatMap((order) => [database.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } }), database.orderStatusLog.create({ data: { orderId: order.id, status: 'CANCELLED' } })]))
   return (await database.order.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map(presentOrder)
 }
 
@@ -90,13 +99,14 @@ export async function cancelOrder(userId: string, orderId: string) {
   ])
 }
 
-export async function reviewOrder(userId: string, orderId: string, rating: number) {
+export async function reviewOrder(userId: string, orderId: string, rating: number, tags: string[], text: string) {
   const order = await database.order.findFirst({ where: { id: orderId, userId } })
   if (!order) throw new AppError(404, '订单不存在')
   if (order.status !== 'COMPLETED') throw new AppError(409, '服务完成后才能评价')
   if (order.reviewed) throw new AppError(409, '该订单已经评价')
   const updated = await database.$transaction(async (tx) => {
     const result = await tx.order.update({ where: { id: order.id }, data: { reviewed: true, reviewRating: rating } })
+    await tx.auditLog.create({ data: { actorId: userId, action: 'ORDER_REVIEW', targetType: 'Order', targetId: order.id, metadata: JSON.stringify({ rating, tags, text, technicianId: order.technicianId, serviceId: order.serviceId }) } })
     const aggregate = await tx.order.aggregate({ where: { technicianId: order.technicianId, reviewed: true }, _avg: { reviewRating: true } })
     await tx.technician.update({ where: { id: order.technicianId }, data: { rating: Math.round((aggregate._avg.reviewRating ?? 5) * 100) / 100 } })
     return result

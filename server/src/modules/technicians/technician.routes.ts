@@ -23,6 +23,15 @@ technicianRouter.get('/:id/availability', async (req, res, next) => {
   catch (error) { next(error) }
 })
 
+technicianRouter.get('/:id/reviews', async (req, res, next) => {
+  try {
+    const technicianId = Number(req.params.id)
+    const rows = await database.auditLog.findMany({ where: { action: 'ORDER_REVIEW' }, orderBy: { createdAt: 'desc' } })
+    const items = rows.flatMap((row) => { try { const data = JSON.parse(row.metadata) as { rating: number; tags?: string[]; text?: string; technicianId: number }; return data.technicianId === technicianId ? [{ id: row.id, rating: data.rating, tags: data.tags ?? [], text: data.text ?? '', createdAt: row.createdAt.toISOString(), customer: '匿名用户' }] : [] } catch { return [] } })
+    res.json({ data: { items, total: items.length, average: items.length ? Math.round(items.reduce((sum, item) => sum + item.rating, 0) / items.length * 100) / 100 : null } })
+  } catch (error) { next(error) }
+})
+
 technicianRouter.get('/:id', async (req, res, next) => {
   try {
     const technician = await database.technician.findUniqueOrThrow({

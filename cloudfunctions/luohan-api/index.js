@@ -3,6 +3,7 @@ const crypto = require('node:crypto')
 const admin = require('./routes-admin')
 const orders = require('./routes-orders')
 const technician = require('./routes-technician')
+const growth = require('./growth')
 
 function accountData(user) {
   try { const parsed = JSON.parse(user.preferences || '[]'); return Array.isArray(parsed) ? { preferences: parsed, addresses: [] } : { preferences: Array.isArray(parsed.preferences) ? parsed.preferences : [], addresses: Array.isArray(parsed.addresses) ? parsed.addresses : [] } }
@@ -21,6 +22,8 @@ exports.main = async (event) => {
       const activeIds = new Set(c.result(services).filter(v => v.active).map(v => v.id))
       return c.success(c.result(rows).map(t => ({ id: t.id, name: t.name, title: t.title, rating: t.rating, orders: t.orderCount, lat: t.latitude, lng: t.longitude, price: t.price, imageKey: t.imageKey, intro: t.intro, experienceYears: t.experienceYears, onTimeRate: t.arrivalTotal ? Math.round(t.onTimeArrivals / t.arrivalTotal * 100) : 100, workStart: t.workStart, workEnd: t.workEnd, workDays: JSON.parse(t.workDays || '[]'), serviceIds: c.result(links).filter(link => link.technicianId === t.id && activeIds.has(link.serviceId)).map(link => link.serviceId) })).filter(t => t.serviceIds.length))
     }
+    const reviewsMatch = path.match(/^\/api\/technicians\/(\d+)\/reviews$/)
+    if (reviewsMatch && method === 'GET') return c.success(await growth.technicianReviews(Number(reviewsMatch[1])))
     const availabilityMatch = path.match(/^\/api\/technicians\/(\d+)\/availability$/)
     if (availabilityMatch && method === 'GET') { const id = Number(availabilityMatch[1]); const [ordersResult, servicesResult, tech] = await Promise.all([c.db.from('Order').select('appointmentAt,status,serviceId').eq('technicianId', id), c.db.from('Service').select('id,duration'), c.first('Technician', 'id', id)]); c.assert(tech && tech.active && !tech.archivedAt, 404, '技师不存在或暂不可约'); const durations = new Map(c.result(servicesResult).map(item => [item.id, item.duration])); const activeOrders = c.result(ordersResult).filter(o => o.status !== 'CANCELLED'); return c.success({ occupied: activeOrders.map(o => c.beijingSlot(o.appointmentAt)), bookings: activeOrders.map(o => ({ slot: c.beijingSlot(o.appointmentAt), duration: Number(durations.get(o.serviceId) || 0) })), workStart: tech.workStart, workEnd: tech.workEnd, workDays: JSON.parse(tech.workDays || '[]') }) }
     if (path === '/api/services' && method === 'GET') return c.success(c.result(await c.db.from('Service').select('*').eq('active', true)).map(s => ({ id: s.id, name: s.name, desc: s.description, price: s.price, duration: s.duration })))

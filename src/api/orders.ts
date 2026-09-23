@@ -13,11 +13,12 @@ export interface CreateOrderInput {
   note?: string
   discount?: number
   couponLabel?: string
+  requestId: string
 }
 
 export const orderClient = {
   list: () => request<Order[]>('/api/orders'),
   create: (input: CreateOrderInput) => request<Order>('/api/orders', { method: 'POST', body: JSON.stringify(input) }),
   cancel: (id: string) => request<void>(`/api/orders/${id}/cancel`, { method: 'POST' }),
-  review: (id: string, rating: number) => request<Order>(`/api/orders/${id}/review`, { method: 'POST', body: JSON.stringify({ rating }) }),
+  review: (id: string, input: { rating: number; tags: string[]; text: string }) => request<Order>(`/api/orders/${id}/review`, { method: 'POST', body: JSON.stringify(input) }),
 }

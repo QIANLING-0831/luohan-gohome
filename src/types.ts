@@ -52,4 +52,6 @@ export interface Order {
   couponLabel?: string
   reviewed?: boolean
   reviewRating?: number
+  createdAt?: string
+  expiresAt?: string
 }

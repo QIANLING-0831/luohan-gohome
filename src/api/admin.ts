@@ -17,10 +17,16 @@ export interface AdminDashboardData {
   statusCounts: Array<{ status: string; count: number }>
   trend: Array<{ label: string; count: number }>
   recentOrders: ManagedOrder[]
+  analytics?: {
+    days: number; averageOrderValue: number; repeatRate: number; completionRate: number
+    funnel: Array<{ label: string; count: number }>
+    technicianRanking: Array<{ id: number; name: string; orders: number; revenue: number }>
+    serviceSales: Array<{ id: string; name: string; orders: number; revenue: number }>
+  }
 }
 
 export const adminClient = {
-  dashboard: () => request<AdminDashboardData>('/api/admin/dashboard'),
+  dashboard: (days = 30) => request<AdminDashboardData>(`/api/admin/dashboard?days=${days}`),
   orders: () => request<ManagedOrder[]>('/api/admin/orders'),
   users: () => request<ManagedUser[]>('/api/admin/users'),
   technicians: () => request<ManagedTechnician[]>('/api/admin/technicians'),
