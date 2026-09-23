@@ -8,7 +8,7 @@ async function expirePendingOrders() {
   const expired = rows.filter(order => Date.now() - new Date(order.createdAt).getTime() >= ACCEPT_TIMEOUT_MS)
   for (const order of expired) {
     const updated = c.result(await c.db.from('Order').update({ status: 'CANCELLED', updatedAt: new Date().toISOString() }).eq('id', order.id).eq('status', 'PENDING').select('id'))
-    if (updated.length) c.result(await c.db.from('OrderStatusLog').insert({ orderId: order.id, status: 'CANCELLED' }))
+    if (updated.length) c.result(await c.db.from('OrderStatusLog').insert({ orderId: order.id, status: 'CANCELLED_TIMEOUT' }))
   }
   return expired.length
 }

@@ -4,7 +4,7 @@ const growth = require('./growth')
 
 async function handle(event, path, method) {
   const identity = await c.authenticatedActor(event, 'USER')
-  if (path === '/api/orders' && method === 'GET') { await growth.expirePendingOrders(); const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); return rows.sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(c.presentOrder) }
+  if (path === '/api/orders' && method === 'GET') { await growth.expirePendingOrders(); const rows = c.result(await c.db.from('Order').select('*').eq('userId', identity.sub)); const logs = c.result(await c.db.from('OrderStatusLog').select('orderId,status,createdAt')); const timedOut = new Set(rows.filter(order => { const own = logs.filter(log => log.orderId === order.id); if (own.some(log => log.status === 'CANCELLED_TIMEOUT')) return true; const cancelled = own.find(log => log.status === 'CANCELLED'); const progressed = own.some(log => !['PENDING', 'CANCELLED'].includes(log.status)); return Boolean(cancelled && !progressed && new Date(cancelled.createdAt).getTime() - new Date(order.createdAt).getTime() >= growth.ACCEPT_TIMEOUT_MS - 30000) }).map(order => order.id)); return rows.sort((a, b) => c.iso(b.createdAt).localeCompare(c.iso(a.createdAt))).map(order => c.presentOrder(order, timedOut.has(order.id) ? 'TIMEOUT' : undefined)) }
   if (path === '/api/orders' && method === 'POST') {
     const input = c.body(event)
     const [technician, service] = await Promise.all([c.first('Technician', 'id', Number(input.technicianId)), c.first('Service', 'id', input.serviceId)])

@@ -66,8 +66,8 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
 export async function listOrders(userId: string) {
   const cutoff = new Date(Date.now() - 15 * 60 * 1000)
   const expired = await database.order.findMany({ where: { userId, status: 'PENDING', createdAt: { lte: cutoff } }, select: { id: true } })
-  if (expired.length) await database.$transaction(expired.flatMap((order) => [database.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } }), database.orderStatusLog.create({ data: { orderId: order.id, status: 'CANCELLED' } })]))
-  return (await database.order.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map(presentOrder)
+  if (expired.length) await database.$transaction(expired.flatMap((order) => [database.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } }), database.orderStatusLog.create({ data: { orderId: order.id, status: 'CANCELLED_TIMEOUT' } })]))
+  return (await database.order.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { statusLogs: true } })).map(presentOrder)
 }
 
 export async function advanceOrder(userId: string, orderId: string) {

@@ -54,4 +54,5 @@ export interface Order {
   reviewRating?: number
   createdAt?: string
   expiresAt?: string
+  cancelReason?: 'TIMEOUT' | 'USER'
 }

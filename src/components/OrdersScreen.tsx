@@ -47,8 +47,8 @@ export function OrdersScreen({
   const [reviewText, setReviewText] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [, setClock] = useState(0);
-  const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
-  const visibleOrders = useMemo(() => orders.filter((item) => filter === "ALL" || filter === "ACTIVE" && item.status < 5 || filter === "COMPLETED" && item.status === 5), [orders, filter]);
+  const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED" | "CANCELLED">("ALL");
+  const visibleOrders = useMemo(() => orders.filter((item) => filter === "ALL" || filter === "ACTIVE" && item.status < 5 || filter === "COMPLETED" && item.status === 5 || filter === "CANCELLED" && item.status === 6), [orders, filter]);
 
   useEffect(() => {
     if (
@@ -143,7 +143,7 @@ export function OrdersScreen({
       </header>
       <div className="user-order-overview">
         <div className="user-order-filters">
-          {([['ALL', '全部'], ['ACTIVE', '进行中'], ['COMPLETED', '已完成']] as const).map(([value, label]) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{label}<small>{value === 'ALL' ? orders.length : value === 'ACTIVE' ? orders.filter((item) => item.status < 5).length : orders.filter((item) => item.status === 5).length}</small></button>)}
+          {([['ALL', '全部'], ['ACTIVE', '进行中'], ['COMPLETED', '已完成'], ['CANCELLED', '已取消']] as const).map(([value, label]) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{label}<small>{value === 'ALL' ? orders.length : value === 'ACTIVE' ? orders.filter((item) => item.status < 5).length : value === 'COMPLETED' ? orders.filter((item) => item.status === 5).length : orders.filter((item) => item.status === 6).length}</small></button>)}
         </div>
         <div className="user-order-list">{visibleOrders.map((item) => {
           const itemTechnician = technicians.find((candidate) => candidate.id === item.techId)
@@ -186,6 +186,7 @@ export function OrdersScreen({
               </b>
             </span>
           </div>
+          {order.status === 6 && <p className="cancel-reason">{order.cancelReason === 'TIMEOUT' ? '因技师未在 15 分钟内接单，系统已自动取消；演示支付不会产生扣款。' : '订单已取消，退款将按原支付路径处理。'}</p>}
           {order.status === 0 && acceptSeconds !== null && <p className="accept-countdown" aria-live="polite">技师接单剩余 {String(Math.floor(acceptSeconds / 60)).padStart(2, '0')}:{String(acceptSeconds % 60).padStart(2, '0')}，超时将自动取消</p>}
           <div className="eta">
             <span>
