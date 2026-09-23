@@ -2,7 +2,7 @@ import { request } from './client'
 
 export interface TechnicianOrder {
   id: string; status: string; statusIndex: number; customer: string; phone: string; service: string
-  amount: number; schedule: string; address: string; detail: string; intensity: string; note: string
+  amount: number; appointmentAt: string; schedule: string; address: string; detail: string; intensity: string; note: string
 }
 export interface TechnicianOverview {
   technician: { id: number; name: string; title: string; active: boolean; rating: number }

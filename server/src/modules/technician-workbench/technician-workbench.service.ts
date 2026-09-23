@@ -12,8 +12,10 @@ export async function technicianOverview(userId: string) {
   const technician = await profileForUser(userId)
   const orders = await database.order.findMany({
     where: { technicianId: technician.id, status: { not: 'CANCELLED' } },
-    include: { user: true, service: true }, orderBy: { appointmentAt: 'asc' },
+    include: { user: true, service: true },
   })
+  const rank = (status: string) => status === 'PENDING' ? 0 : status === 'COMPLETED' ? 2 : 1
+  orders.sort((a, b) => { const group = rank(a.status) - rank(b.status); if (group) return group; if (rank(a.status) === 1) return Math.abs(a.appointmentAt.getTime() - Date.now()) - Math.abs(b.appointmentAt.getTime() - Date.now()); return rank(a.status) === 2 ? b.appointmentAt.getTime() - a.appointmentAt.getTime() : a.appointmentAt.getTime() - b.appointmentAt.getTime() })
   return {
     technician: { id: technician.id, name: technician.name, title: technician.title, active: technician.active, rating: technician.rating },
     metrics: {
@@ -23,7 +25,7 @@ export async function technicianOverview(userId: string) {
       income: orders.filter((item) => item.status === 'COMPLETED').reduce((sum, item) => sum + item.paidAmount, 0),
     },
     orders: orders.map((item) => ({
-      id: item.id, status: item.status, statusIndex: statusIndex(item.status), customer: item.user.name,
+      id: item.id, status: item.status, statusIndex: statusIndex(item.status), appointmentAt: item.appointmentAt.toISOString(), customer: item.user.name,
       phone: item.user.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2'), service: item.service.name,
       amount: item.paidAmount, schedule: `${item.dateLabel} ${new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(item.appointmentAt)}`,
       address: item.addressLabel, detail: item.addressDetail, intensity: item.intensity, note: item.note,
