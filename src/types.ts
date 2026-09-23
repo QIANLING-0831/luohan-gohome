@@ -55,4 +55,5 @@ export interface Order {
   createdAt?: string
   expiresAt?: string
   cancelReason?: 'TIMEOUT' | 'USER'
+  statusHistory?: Array<{ status: string; occurredAt: string; reason?: 'TIMEOUT' | 'USER' }>
 }

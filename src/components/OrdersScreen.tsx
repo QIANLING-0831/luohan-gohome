@@ -22,6 +22,9 @@ interface ChatMessage {
   text: string;
 }
 type Panel = "chat" | "cancel" | "review" | null;
+const timelineLabels: Record<string, string> = { PENDING: '订单已创建', ACCEPTED: '技师已接单', DEPARTED: '技师已出发', ARRIVED: '技师已到达', IN_SERVICE: '服务已开始', COMPLETED: '服务已完成', CANCELLED: '订单已取消' };
+const timelineCodes = ['PENDING', 'ACCEPTED', 'DEPARTED', 'ARRIVED', 'IN_SERVICE', 'COMPLETED'];
+const timelineTime = (value: string) => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
 
 export function OrdersScreen({
   order,
@@ -98,6 +101,8 @@ export function OrdersScreen({
           ? "进行中"
           : "已结束";
   const acceptSeconds = order.expiresAt ? Math.max(0, Math.ceil((new Date(order.expiresAt).getTime() - Date.now()) / 1000)) : null;
+  const actualHistory = order.statusHistory?.length ? order.statusHistory : order.createdAt ? [{ status: timelineCodes[Math.min(order.status, 5)], occurredAt: order.createdAt }] : [];
+  const timelineEvents = [...actualHistory, ...(order.status < 5 ? [{ status: timelineCodes[order.status + 1], occurredAt: '', pending: true }] : [])];
   const openReview = () => {
     if (order.reviewed) return onNotify(`本次服务已评价 ${order.reviewRating} 星`);
     setPanel("review");
@@ -234,21 +239,17 @@ export function OrdersScreen({
             <strong>8 6 1 9</strong>
           </div>
           <div className="timeline">
-            {orderStatuses.slice(0, 6).map((item, index) => (
+            {timelineEvents.map((event, index) => (
               <div
-                key={item}
-                className={`step ${index < order.status ? "done" : index === order.status ? "current" : ""}`}
+                key={`${event.status}-${event.occurredAt}-${index}`}
+                className={`step ${'pending' in event && event.pending ? '' : index === actualHistory.length - 1 ? "current" : "done"}`}
               >
                 <i className="step-dot" />
                 <span>
-                  <b>{item}</b>
+                  <b>{timelineLabels[event.status] ?? event.status}</b>
                   <br />
                   <small>
-                    {index === order.status
-                      ? "当前状态"
-                      : index < order.status
-                        ? "已完成"
-                        : "等待更新"}
+                    {'pending' in event && event.pending ? '等待更新' : `${timelineTime(event.occurredAt)}${'reason' in event && event.reason === 'TIMEOUT' ? ' · 接单超时' : ''}`}
                   </small>
                 </span>
               </div>
